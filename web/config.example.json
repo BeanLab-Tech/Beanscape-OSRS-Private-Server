@@ -1,0 +1,7 @@
+{
+  "discord_client_id": "PASTE_FROM_DISCORD_DEVELOPER_PORTAL",
+  "discord_client_secret": "PASTE_FROM_DISCORD_DEVELOPER_PORTAL",
+  "redirect_uri": "http://100.98.119.38:8085/oauth/discord/callback",
+  "db_path": "/opt/osrs/server/rsmod/.data/saves/game.db",
+  "admin_discord_ids": []
+}
