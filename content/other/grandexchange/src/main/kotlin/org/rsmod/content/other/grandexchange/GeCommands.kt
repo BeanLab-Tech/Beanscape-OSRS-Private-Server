@@ -77,8 +77,8 @@ constructor(
     private data class OfferArgs(val type: UnpackedObjType, val qty: Int, val price: Long)
 
     /**
-     * Parses `<item id> <qty> <price each>` and resolves the item to its tradeable, un-noted form so
-     * noted and un-noted stock share one market. Returns `null` after telling the player why.
+     * Parses `<item id> <qty> <price each>` and resolves the item to its tradeable, un-noted form
+     * so noted and un-noted stock share one market. Returns `null` after telling the player why.
      */
     private fun ProtectedAccess.parseOfferArgs(verb: String, parts: List<String>): OfferArgs? {
         if (parts.size < 4) {
@@ -309,21 +309,21 @@ constructor(
         db.request(
             request = { conn -> GameDbResult.Ok(recentPrices(conn, type.id)) },
             response = response@{ result ->
-                val player = playerUid.resolve(playerList) ?: return@response
-                result.fold(
-                    onOk = { rows ->
-                        if (rows.isEmpty()) {
-                            player.mes("No recent trades for $name.")
-                        } else {
-                            player.mes("Recent trades for $name:")
-                            for ((pricePer, qty) in rows) {
-                                player.mes("  $qty x @ $pricePer gp")
+                    val player = playerUid.resolve(playerList) ?: return@response
+                    result.fold(
+                        onOk = { rows ->
+                            if (rows.isEmpty()) {
+                                player.mes("No recent trades for $name.")
+                            } else {
+                                player.mes("Recent trades for $name:")
+                                for ((pricePer, qty) in rows) {
+                                    player.mes("  $qty x @ $pricePer gp")
+                                }
                             }
-                        }
-                    },
-                    onErr = { player.mes("Database error reading prices.") },
-                )
-            },
+                        },
+                        onErr = { player.mes("Database error reading prices.") },
+                    )
+                },
         )
     }
 

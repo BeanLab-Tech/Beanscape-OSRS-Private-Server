@@ -141,9 +141,23 @@ class GeBookTest {
     fun placementSnapshotsEveryTouchedOfferIncludingPartiallyFilledRestingOffers() {
         val book = GeBook()
         val sell =
-            book.placeSell(accountId = 2, slot = 0, itemId = 4151, quantity = 5, pricePer = 100, now = 1)
+            book.placeSell(
+                accountId = 2,
+                slot = 0,
+                itemId = 4151,
+                quantity = 5,
+                pricePer = 100,
+                now = 1,
+            )
         val buy =
-            book.placeBuy(accountId = 1, slot = 0, itemId = 4151, quantity = 2, pricePer = 100, now = 2)
+            book.placeBuy(
+                accountId = 1,
+                slot = 0,
+                itemId = 4151,
+                quantity = 2,
+                pricePer = 100,
+                now = 2,
+            )
 
         // The resting sell is still ACTIVE but partially filled; it must be persisted too, or a
         // restart would restore it with its full quantity (duplicating items) and no proceeds.
@@ -163,9 +177,23 @@ class GeBookTest {
     fun tradesRecordTheMatchedOfferPair() {
         val book = GeBook()
         val sell =
-            book.placeSell(accountId = 2, slot = 0, itemId = 4151, quantity = 1, pricePer = 100, now = 1)
+            book.placeSell(
+                accountId = 2,
+                slot = 0,
+                itemId = 4151,
+                quantity = 1,
+                pricePer = 100,
+                now = 1,
+            )
         val buy =
-            book.placeBuy(accountId = 1, slot = 0, itemId = 4151, quantity = 1, pricePer = 100, now = 2)
+            book.placeBuy(
+                accountId = 1,
+                slot = 0,
+                itemId = 4151,
+                quantity = 1,
+                pricePer = 100,
+                now = 2,
+            )
         val trade = buy.trades.single()
         assertEquals(buy.offer.id, trade.buyOfferId)
         assertEquals(sell.offer.id, trade.sellOfferId)
@@ -177,7 +205,14 @@ class GeBookTest {
         repeat(GeTypes.MAX_SLOTS_PER_ACCOUNT) { i ->
             val slot = book.freeSlot(accountId = 1)!!
             assertEquals(i, slot)
-            book.placeBuy(accountId = 1, slot = slot, itemId = 4151, quantity = 1, pricePer = 1, now = 1)
+            book.placeBuy(
+                accountId = 1,
+                slot = slot,
+                itemId = 4151,
+                quantity = 1,
+                pricePer = 1,
+                now = 1,
+            )
         }
         assertNull(book.freeSlot(accountId = 1))
 
@@ -197,7 +232,14 @@ class GeBookTest {
         val book = GeBook()
         book.ensureNextIdAbove(41)
         val placed =
-            book.placeBuy(accountId = 1, slot = 0, itemId = 4151, quantity = 1, pricePer = 1, now = 1)
+            book.placeBuy(
+                accountId = 1,
+                slot = 0,
+                itemId = 4151,
+                quantity = 1,
+                pricePer = 1,
+                now = 1,
+            )
         assertEquals(42, placed.offer.id)
     }
 

@@ -104,9 +104,9 @@ public data class GeTrade(
 )
 
 /**
- * Result of placing an offer. [touched] holds immutable snapshots of every offer whose state changed
- * (the new offer plus each resting counterparty), taken at placement time so they can be persisted
- * off the game thread without racing later mutations.
+ * Result of placing an offer. [touched] holds immutable snapshots of every offer whose state
+ * changed (the new offer plus each resting counterparty), taken at placement time so they can be
+ * persisted off the game thread without racing later mutations.
  */
 public data class GePlacement(
     public val offer: GeOffer,

@@ -56,7 +56,8 @@ constructor(
         // Accounts that have not been saved since their last rename are only visible in memory.
         val onlineClash =
             playerList.any {
-                it.accountId != player.accountId && it.displayName.equals(newName, ignoreCase = true)
+                it.accountId != player.accountId &&
+                    it.displayName.equals(newName, ignoreCase = true)
             }
         if (onlineClash) {
             mes("That display name is already taken.")
@@ -67,23 +68,23 @@ constructor(
         db.request(
             request = { conn -> GameDbResult.Ok(updateDisplayName(conn, accountId, newName)) },
             response = response@{ result ->
-                val player = playerUid.resolve(playerList) ?: return@response
-                result.fold(
-                    onOk = { code ->
-                        when (code) {
-                            NAME_TAKEN -> player.mes("That display name is already taken.")
-                            ACCOUNT_MISSING ->
-                                player.mes("Account record not found - contact an admin.")
-                            else -> {
-                                player.displayName = newName
-                                player.rebuildAppearance()
-                                player.mes("Your display name is now $newName.")
+                    val player = playerUid.resolve(playerList) ?: return@response
+                    result.fold(
+                        onOk = { code ->
+                            when (code) {
+                                NAME_TAKEN -> player.mes("That display name is already taken.")
+                                ACCOUNT_MISSING ->
+                                    player.mes("Account record not found - contact an admin.")
+                                else -> {
+                                    player.displayName = newName
+                                    player.rebuildAppearance()
+                                    player.mes("Your display name is now $newName.")
+                                }
                             }
-                        }
-                    },
-                    onErr = { player.mes("Database error - name not changed, try again.") },
-                )
-            },
+                        },
+                        onErr = { player.mes("Database error - name not changed, try again.") },
+                    )
+                },
         )
     }
 
