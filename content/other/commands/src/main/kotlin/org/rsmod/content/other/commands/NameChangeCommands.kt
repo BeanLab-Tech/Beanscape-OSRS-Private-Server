@@ -8,6 +8,7 @@ import org.rsmod.api.db.gateway.model.fold
 import org.rsmod.api.player.output.mes
 import org.rsmod.api.player.protect.ProtectedAccess
 import org.rsmod.api.player.protect.ProtectedAccessLauncher
+import org.rsmod.api.script.onCommand
 import org.rsmod.game.cheat.Cheat
 import org.rsmod.game.entity.PlayerList
 import org.rsmod.plugin.scripts.PluginScript
@@ -22,7 +23,12 @@ constructor(
 ) : PluginScript() {
 
     override fun ScriptContext.startup() {
-        onCommand("name", "Change your display name: ::name <new name>", ::changeName)
+        // Deliberately not the internal `onCommand(command, desc, cheat)` helper in ScriptHelpers:
+        // that one restricts commands to admins, and name changes are for every player.
+        onCommand("name") {
+            desc = "Change your display name: ::name <new name>"
+            cheat { changeName(this) }
+        }
     }
 
     private fun changeName(cheat: Cheat) =
@@ -34,7 +40,7 @@ constructor(
             }
         }
 
-    private suspend fun ProtectedAccess.applyName(newName: String) {
+    private fun ProtectedAccess.applyName(newName: String) {
         if (newName.isEmpty()) {
             mes("Usage: ::name <new name> (2-12 chars: letters, numbers, space, _ or -)")
             return
@@ -43,18 +49,35 @@ constructor(
             mes("Invalid name: use 2-12 characters, letters, numbers, spaces, _ or - only.")
             return
         }
+        if (newName == player.displayName) {
+            mes("That is already your display name.")
+            return
+        }
+        // Accounts that have not been saved since their last rename are only visible in memory.
+        val onlineClash =
+            playerList.any {
+                it.accountId != player.accountId && it.displayName.equals(newName, ignoreCase = true)
+            }
+        if (onlineClash) {
+            mes("That display name is already taken.")
+            return
+        }
         val accountId = player.accountId
+        val playerUid = player.uid
         db.request(
             request = { conn -> GameDbResult.Ok(updateDisplayName(conn, accountId, newName)) },
-            response = { result ->
+            response = response@{ result ->
+                val player = playerUid.resolve(playerList) ?: return@response
                 result.fold(
                     onOk = { code ->
                         when (code) {
                             NAME_TAKEN -> player.mes("That display name is already taken.")
-                            ACCOUNT_MISSING -> player.mes("Account record not found - contact an admin.")
+                            ACCOUNT_MISSING ->
+                                player.mes("Account record not found - contact an admin.")
                             else -> {
                                 player.displayName = newName
-                                player.mes("Your display name is now  + newName + .")
+                                player.rebuildAppearance()
+                                player.mes("Your display name is now $newName.")
                             }
                         }
                     },
@@ -64,33 +87,35 @@ constructor(
         )
     }
 
-    private fun updateDisplayName(
-        conn: DatabaseConnection,
-        accountId: Int,
-        newName: String,
-    ): Int {
-        val check =
-            conn.prepareStatement(
-                "SELECT COUNT(*) FROM accounts WHERE display_name = ? AND id != ?"
-            )
-        check.setString(1, newName)
-        check.setInt(2, accountId)
-        val rs = check.executeQuery()
-        val taken = rs.next() && rs.getInt(1) > 0
-        rs.close()
-        check.close()
+    private fun updateDisplayName(conn: DatabaseConnection, accountId: Int, newName: String): Int {
+        // Case-insensitive, and login usernames count too, so nobody can pose as "Zezima" while
+        // the real zezima's display name differs or is still unset.
+        val taken =
+            conn
+                .prepareStatement(
+                    "SELECT COUNT(*) FROM accounts WHERE id != ? AND " +
+                        "(LOWER(display_name) = LOWER(?) OR LOWER(login_username) = LOWER(?))"
+                )
+                .use {
+                    it.setInt(1, accountId)
+                    it.setString(2, newName)
+                    it.setString(3, newName)
+                    it.executeQuery().use { rs -> rs.next() && rs.getInt(1) > 0 }
+                }
         if (taken) {
             return NAME_TAKEN
         }
-        val upd =
-            conn.prepareStatement(
-                "UPDATE accounts SET display_name = ?, updated_at = CURRENT_TIMESTAMP " +
-                    "WHERE id = ?"
-            )
-        upd.setString(1, newName)
-        upd.setInt(2, accountId)
-        val rows = upd.executeUpdate()
-        upd.close()
+        val rows =
+            conn
+                .prepareStatement(
+                    "UPDATE accounts SET display_name = ?, updated_at = CURRENT_TIMESTAMP " +
+                        "WHERE id = ?"
+                )
+                .use {
+                    it.setString(1, newName)
+                    it.setInt(2, accountId)
+                    it.executeUpdate()
+                }
         return if (rows > 0) NAME_OK else ACCOUNT_MISSING
     }
 
@@ -98,6 +123,6 @@ constructor(
         const val NAME_TAKEN = -1
         const val NAME_OK = 1
         const val ACCOUNT_MISSING = 0
-        val NAME_REGEX = Regex("^[A-Za-z0-9_ -]{2,12}$")
+        val NAME_REGEX = Regex("^[A-Za-z0-9_-]([A-Za-z0-9_ -]{0,10}[A-Za-z0-9_-])$")
     }
 }

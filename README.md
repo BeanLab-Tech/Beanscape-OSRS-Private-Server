@@ -4,7 +4,9 @@ Ferox-inspired sandboxed PVM experience on **RsMod rev 233** with **RuneLite**, 
 
 **Stack:** RsMod + RSProx + SQLite + Discord registration + Tailscale-only networking  
 **VM:** 123 — `192.168.1.134` / `100.98.119.38` (tailnet)  
-**Repo:** https://gitea.tail5475a4.ts.net/cfiaschetti/osrs-server.git
+**Repo:** https://github.com/chad-fiaschetti/Beanscape-OSRS-Private-Server (mirror: https://gitea.tail5475a4.ts.net/cfiaschetti/osrs-server.git)
+
+> This repo is an **overlay** on upstream RsMod: it holds only the BeanLab modules, migrations and docs. Build it with `scripts/build-overlay.sh`. Latest audit: [`docs/AUDIT_2026-10-29.md`](docs/AUDIT_2026-10-29.md).
 
 ---
 
@@ -66,7 +68,7 @@ Ferox-inspired sandboxed PVM experience on **RsMod rev 233** with **RuneLite**, 
 
 ### Step 1 — Install RSProx
 
-1. Download from the repo: `rsprox-launcher.jar` (or build from `client/rsprox/`)
+1. Get `rsprox-launcher.jar` from the [RSProx releases](https://github.com/blurite/rsprox) (it is not in this repo)
 2. Place in `C:\Users\<you>\Desktop\OSRS-RsMod-Client\`
 3. Ensure Java 21 JDK is installed (not JRE — the launcher re-signs jars)
 
@@ -118,9 +120,8 @@ RuneLite will download, patch, and launch automatically. First launch takes ~60 
 ### Getting Started
 - Log in with your Discord-registered credentials
 - You spawn in the dev realm (Lumbridge-style starting area)
-- XP rate: 150× (dev realm — adjust in `realms` table)
-- Use `::master` to toggle admin mode (requires OWNER/DEVELOPER rights)
-- Use `::item <id> <qty>` to spawn items (admin only)
+- XP rate: 150× (`realms.player_xp_rate_in_hundreds = 15000`)
+- Everyone can use `::name` and `::ge`; admin commands (`::master`, `::invadd`, …) need the `admin` mod level
 
 ### Controls
 Standard OSRS controls — RuneLite plugins work. Notable defaults:
@@ -170,24 +171,24 @@ journalctl -u osrs-discord -f
 sqlite3 /opt/osrs/server/rsmod/.data/saves/game.db
 
 # List accounts
-SELECT id, login_username, created_at FROM accounts;
+SELECT id, login_username, display_name, modlevel, created_at FROM accounts;
 
-# Promote user to OWNER
-UPDATE accounts SET rights = 4 WHERE login_username = 'username';
+# Promote user to owner
+UPDATE accounts SET modlevel = 'owner' WHERE login_username = 'username';
 
 # Check realms
-SELECT * FROM realms;
+SELECT name, require_registration, ignore_passwords, dev_mode FROM realms;
 
-# Flip require_registration on dev realm
-UPDATE realms SET require_registration = 1 WHERE name = 'dev';
+# Applied migrations
+SELECT version, description, success FROM flyway_schema_history;
 ```
 
 ### Promote a Player to Admin
 
 ```sql
--- In the game.db SQLite:
-UPDATE accounts SET rights = 4 WHERE login_username = 'theirusername';
--- Rights: 0=NONE, 1=PLAYER, 2=MODERATOR, 3=ADMIN, 4=OWNER, 5=DEVELOPER
+-- Stop the server first: online players' mod level is written back when they are saved.
+UPDATE accounts SET modlevel = 'admin' WHERE login_username = 'theirusername';
+-- modlevel: NULL (player), 'moderator', 'admin', 'owner'
 ```
 
 ### Adding Content
@@ -196,31 +197,24 @@ RsMod uses a plugin system. New content goes in `content/` as a module:
 
 ```
 content/other/<feature>/
-  build.gradle.kts          # module dependencies
+  build.gradle.kts          # plugins { id("base-conventions") } + dependencies
   src/main/kotlin/.../
-    <Feature>Plugin.kt       # plugin entry point
-    <Feature>Commands.kt     # ::commands
+    <Feature>Script.kt       # PluginScript subclass with an @Inject constructor
   src/test/kotlin/.../
-    <Feature>Test.kt         # tests
+    <Feature>Test.kt
 ```
 
-Register the module in `settings.gradle.kts` and add it to the server's plugin list in `data/server.toml`.
+Modules are auto-discovered (any `content/**/build.gradle.kts`); there is no plugin list to edit.
+Check your change with `scripts/build-overlay.sh`. See `AGENTS.md` for conventions.
 
 ### Git Workflow
 
+This GitHub repo holds the overlay. On the VM, `/opt/osrs/server/rsmod` is an upstream checkout
+with the overlay copied in:
+
 ```bash
 cd /opt/osrs/server/rsmod
-
-# Make changes, then:
-git add <files>
-git commit -m "feat: description"
-git push origin main          # upstream rsmod (if you maintain a fork)
-git push gitea main           # BeanLab Gitea
-```
-
-Remote `gitea` is pre-configured:
-```
-https://gitea.tail5475a4.ts.net/cfiaschetti/osrs-server.git
+git push gitea main           # BeanLab Gitea mirror — never push to origin (upstream rsmod)
 ```
 
 ### Systemd Units
@@ -255,44 +249,53 @@ The bot (`osrs-discord.service`) listens in its dedicated channel for:
 
 **What happens:**
 1. Bot validates username format
-2. Creates account in `game.db` with Argon2id hash (m=65536, t=20, p=1)
+2. Creates account in `game.db` with an Argon2i hash (m=65536, t=20, p=1 — same as the server)
 3. DMs credentials to the Discord user
 4. On first login, the game server completes character creation automatically
 
-**Enforcement:** Flip `require_registration=1` on the `dev` realm to make Discord the only registration path. Until then, accounts can be created in-game.
+**Enforcement:** migration V9 sets `require_registration=1` (Discord is the only way to create accounts) and turns off `ignore_passwords`/`dev_mode`, which until then let anyone log into any account with any password. See the audit §4 for the deploy steps.
 
 ---
 
 ## In-Game Commands
 
-### Admin (`::` prefix — requires OWNER/DEVELOPER)
+### Everyone
 
 | Command | Description |
 |---------|-------------|
-| `::master` | Toggle admin mode (spawn items, teleport, etc.) |
-| `::item <id> <qty>` | Spawn item (e.g., `::item 995 1000000` for 1M gp) |
-| `::npc <id> <qty>` | Spawn NPC |
-| `::infinitehp` | Toggle invincibility |
-| `::tele <x> <y> <plane>` | Teleport to coordinates |
-| `::name <new name>` | Change display name (available to all players) |
-| `::ge buy <item> <qty> <price>` | Place GE buy offer |
-| `::ge sell <item> <qty> <price>` | Place GE sell offer |
-| `::ge collect` | Collect completed GE items/gold |
-| `::ge cancel <slot>` | Cancel active GE offer |
-| `::ge history` | View GE trade history |
+| `::name <new name>` | Change display name (2-12 chars: letters, numbers, space, `_`, `-`; unique, case-insensitive) |
+| `::ge buy <item id> <qty> <price each>` | Place a buy offer (coins are escrowed) |
+| `::ge sell <item id> <qty> <price each>` | Place a sell offer (noted or un-noted items) |
+| `::ge offers` | List your offers and their slots |
+| `::ge cancel <slot>` | Cancel an active offer |
+| `::ge collect` | Collect items/coins from finished or cancelled offers |
+| `::ge price <item id>` | Show the last 5 trades for an item |
+
+### Admin (`admin` mod level or higher)
+
+| Command | Description |
+|---------|-------------|
+| `::master` / `::reset` | Max out / reset all stats |
+| `::invadd <obj> [count]` | Spawn an item into your inventory |
+| `::invclear` | Empty your inventory |
+| `::npcadd <npc>` | Spawn an NPC |
+| `::tele <coords>` / `::mypos` | Teleport / show your coordinates |
+| `::realm` | Update realm configs |
+| `::reboot` / `::slowreboot` | Reboot the game world |
+
+Full list: `content/other/commands/.../AdminCommands.kt` upstream.
 
 ### Grand Exchange
 
-**Schema:** `ge_offers` + `ge_history` tables (Flyway v7)
+**Schema:** `ge_offers` + `ge_history` (Flyway V7, V8)
 
-**Matching engine:**
-- Price-time priority (earlier orders at same price fill first)
-- 2% sell tax (exempt for offers < 100 gp, capped at 5M tax per offer)
-- Buyer gold escrowed on offer creation, refunded on cancellation
-- Partial fills supported
-- Guide prices from volume-weighted trade history
-
----
+**Rules:**
+- Price-time priority; trades execute at the resting offer's price
+- 2% seller tax per item, exempt below 100 gp per item, capped at 5m per item
+- Buyer coins are escrowed when the offer is placed; unspent coins come back on collect
+- Partial fills supported; 8 slots per player, and a finished offer holds its slot until collected
+- Untradeable items and coins cannot be listed; noted items trade in the same market as un-noted
+- Offer totals are limited to 2,147,483,647 gp (one coin stack)
 
 ## Current Progress
 
@@ -300,8 +303,8 @@ The bot (`osrs-discord.service`) listens in its dedicated channel for:
 |-----------|--------|----------|
 | 1. Tailnet-only, no public access | ✅ Done | ufw default deny, 22+43594 scoped to `100.64.0.0/10`; nmap LAN filtered |
 | 2. RuneLite client | ✅ Done | RuneLite 1.11.19 launched via RSProx, bootstrap pinned to 4bed6512 (233-era), E2E login verified |
-| 3. Grand Exchange | ✅ Done | Schema v7, GeBook/GeCommands built, engine in repo, applied on server boot |
-| 4. Discord registration + name change | ✅ Done | Bot online as Ned#9953; `::name` loaded; `require_registration` flip pending E2E |
+| 3. Grand Exchange | 🟡 Code complete | Engine + `::ge` commands, unit-tested; persistence bugs fixed in the audit; not yet tested in-game |
+| 4. Discord registration + name change | 🟡 Deploy pending | Bot online as Ned#9953; enforcement + real password checks need V9 deployed; `::name` fixed for non-admins |
 
 **Infrastructure:**
 - ✅ Server running as `osrs-server.service` on port 43594
@@ -309,37 +312,36 @@ The bot (`osrs-discord.service`) listens in its dedicated channel for:
 - ✅ ufw §5 baseline (default deny, 2 rules)
 - ✅ `tailscale serve` on 443 → jav_config.ws + world_list.ws
 - ✅ SSH hardening (key-only, root prohibited)
-- ✅ Discord bot (`osrs-discord.service`) with Argon2id interop verified
+- ✅ Discord bot (`osrs-discord.service`) with Argon2 interop verified
 - ✅ node-exporter on tailscale0:9100
-- ✅ Prometheus target added (pending ACL fix)
+- 🟡 Prometheus target added (DOWN until the ACL fix)
 - ✅ Proxmox snapshot `pre-phase-1-osrs`
+- ✅ CI: `scripts/build-overlay.sh` on every push
 
 ---
 
 ## Roadmap / Next Steps
 
-### Immediate (this week)
-1. **Flip `require_registration=1`** on `dev` realm — makes Discord the only registration path
-2. **Live-test GE commands** — `::ge buy/sell/collect/cancel/history` in-game
-3. **Live-test `::name`** — verify name change works end-to-end
-4. **Take `post-phase-1-complete` Proxmox snapshot**
+Full reasoning in [`docs/AUDIT_2026-10-29.md`](docs/AUDIT_2026-10-29.md) §6.
 
-### Short-term (Phase 2–3)
-5. **Ferox-style content:**
-   - Donator zone / high-risk PKing area
-   - Minigame lobbies (Barrows, Godwars, Zulrah instances)
-   - Vote rewards / Donator shop
-6. **Custom RuneLite plugin** — BeanLab-branded sidebar panel with server stats, GE tracker, Discord link
-7. **Web-based account dashboard** — view GE offers, change password, manage characters
-8. **ACL fix** — either re-tag VM to `tag:server` or add `tag:monitoring → tag:game :9100` ACL rule (Heimdall's call)
+### Now (before anyone else logs in)
+1. **Deploy V8/V9** and demote accounts that got `owner` from dev mode (audit §4)
+2. **Live-test** `::ge` (incl. restart with open offers) and `::name` with two accounts
+3. **Version the Discord bot** — it is the only account-creation path and lives only on the VM
+4. **Nightly `game.db` backups** (`sqlite3 .backup`) and the `post-phase-1-complete` snapshot
 
-### Medium-term (Phase 4–6)
-9. **World switcher** — multiple game worlds (different XP rates, PvP/PvM modes)
-10. **Hiscores / leaderboards** — web-accessible via RuneLite plugin
-11. **Clan system** — clan creation, chat, Castle Wars / Clan Wars
-12. **Seasonal / tournament worlds** — time-limited resets with leaderboards
-13. **Cloudflare tunnel for public launch** — when ready to open to non-tailnet players
-14. **Automated backups** — nightly DB dumps to NAS/R2
+### Next
+5. Name-change rules: cooldown, profanity filter, reserved names
+6. GE: save GE state with the character save, buy limits, admin inspection
+7. Real GE interface instead of `::ge` text commands
+8. Monitoring ACL fix (`tag:monitoring → tag:game :9100`)
+9. Move BeanLab migrations to a reserved version range before updating upstream
+
+### Later
+10. Ferox-style content: donator zone, high-risk PK area, minigame lobbies, vote/donator shop
+11. BeanLab RuneLite plugin (server stats, GE tracker, Discord link)
+12. Web account dashboard, hiscores, clans, multiple worlds, seasonal worlds
+13. Public launch via tunnel
 
 ---
 
@@ -381,10 +383,11 @@ journalctl -u osrs-discord -n 20
 ```
 
 ### GE commands not working
-Ensure the server has been restarted after the GE migration was added (Flyway runs on boot). Check schema version:
+Ensure the server has been restarted after the GE migrations were added (Flyway runs on boot). Check that V7 and V8 applied:
 ```bash
-sqlite3 /opt/osrs/server/rsmod/.data/saves/game.db "SELECT * FROM schema_version;"
+sqlite3 /opt/osrs/server/rsmod/.data/saves/game.db "SELECT version, description, success FROM flyway_schema_history;"
 ```
+If `::ge` says "still loading", the offer restore failed at boot — look for `Failed to restore Grand Exchange offers` in `journalctl -u osrs-server`.
 
 ---
 

@@ -1,5 +1,6 @@
 package org.rsmod.content.other.grandexchange
 
+import com.github.michaelbull.logging.InlineLogger
 import jakarta.inject.Inject
 import org.rsmod.api.db.DatabaseConnection
 import org.rsmod.api.db.gateway.GameDbManager
@@ -8,26 +9,32 @@ import org.rsmod.api.db.gateway.model.fold
 import org.rsmod.api.player.output.mes
 import org.rsmod.api.player.protect.ProtectedAccess
 import org.rsmod.api.player.protect.ProtectedAccessLauncher
-import org.rsmod.api.repo.obj.ObjRepository
 import org.rsmod.api.script.onCommand
 import org.rsmod.game.cheat.Cheat
+import org.rsmod.game.entity.PlayerList
 import org.rsmod.game.type.obj.ObjTypeList
+import org.rsmod.game.type.obj.UnpackedObjType
 import org.rsmod.plugin.scripts.PluginScript
 import org.rsmod.plugin.scripts.ScriptContext
 
 /** Process-wide Grand Exchange state, restored from the database on startup. */
 public object GeState {
     public val book: GeBook = GeBook()
+
+    /** `false` until persisted offers are loaded; trading before then could reuse offer ids. */
+    @Volatile public var ready: Boolean = false
+    @Volatile public var restoring: Boolean = false
 }
 
 public class GeCommands
 @Inject
 constructor(
     private val objTypes: ObjTypeList,
-    private val objRepo: ObjRepository,
+    private val playerList: PlayerList,
     private val db: GameDbManager,
     private val protectedAccess: ProtectedAccessLauncher,
 ) : PluginScript() {
+    private val logger = InlineLogger()
 
     override fun ScriptContext.startup() {
         onCommand("ge") {
@@ -39,6 +46,11 @@ constructor(
 
     private fun ge(cheat: Cheat) =
         with(cheat) {
+            if (!GeState.ready) {
+                restoreOffers()
+                player.mes("The Grand Exchange is still loading - try again shortly.")
+                return@with
+            }
             val parts = args.toList()
             val launched = protectedAccess.launch(player) { handleGe(parts) }
             if (!launched) {
@@ -62,139 +74,142 @@ constructor(
         }
     }
 
-    private suspend fun ProtectedAccess.buy(parts: List<String>) {
+    private data class OfferArgs(val type: UnpackedObjType, val qty: Int, val price: Long)
+
+    /**
+     * Parses `<item id> <qty> <price each>` and resolves the item to its tradeable, un-noted form so
+     * noted and un-noted stock share one market. Returns `null` after telling the player why.
+     */
+    private fun ProtectedAccess.parseOfferArgs(verb: String, parts: List<String>): OfferArgs? {
         if (parts.size < 4) {
-            mes("Usage: ::ge buy <item id> <qty> <price each>")
-            return
+            mes("Usage: ::ge $verb <item id> <qty> <price each>")
+            return null
         }
         val itemId = parts[1].toIntOrNull()
         val qty = parts[2].toIntOrNull()
         val price = parts[3].toLongOrNull()
         if (itemId == null || qty == null || price == null || qty <= 0 || price <= 0) {
             mes("Invalid item id, quantity or price.")
-            return
+            return null
         }
-        val type = objTypes[itemId]
-        if (type == null) {
+        val requested = objTypes[itemId]
+        if (requested == null) {
             mes("Unknown item id: $itemId")
-            return
+            return null
         }
-        val accountId = player.accountId
-        val active = GeState.book.activeOffersForAccount(accountId)
-        if (active.size >= GeTypes.MAX_SLOTS_PER_ACCOUNT) {
+        val type = objTypes.uncert(requested)
+        if (type.id == COINS || !type.tradeable) {
+            mes("${itemName(type)} cannot be traded on the Grand Exchange.")
+            return null
+        }
+        if (qty.toLong() * price > GeTypes.MAX_OFFER_VALUE) {
+            mes("Offer value too large - the total must not exceed ${GeTypes.MAX_OFFER_VALUE} gp.")
+            return null
+        }
+        return OfferArgs(type, qty, price)
+    }
+
+    private fun ProtectedAccess.claimSlot(accountId: Int): Int? {
+        val slot = GeState.book.freeSlot(accountId)
+        if (slot == null) {
             mes(
-                "You already have ${active.size} active offers (max ${GeTypes.MAX_SLOTS_PER_ACCOUNT})."
+                "All ${GeTypes.MAX_SLOTS_PER_ACCOUNT} Grand Exchange slots are in use - " +
+                    "::ge collect or ::ge cancel to free one."
             )
-            return
         }
-        val totalCost = qty.toLong() * price
-        if (totalCost > Int.MAX_VALUE) {
-            mes("Order value too large - split it into smaller orders.")
-            return
-        }
+        return slot
+    }
+
+    private suspend fun ProtectedAccess.buy(parts: List<String>) {
+        val (type, qty, price) = parseOfferArgs("buy", parts) ?: return
+        val accountId = player.accountId
+        val slot = claimSlot(accountId) ?: return
+        val totalCost = (qty.toLong() * price).toInt()
         if (invCoinTotal() < totalCost) {
-            mes("You need ${totalCost} coins but only have ${invCoinTotal()}.")
+            mes("You need $totalCost coins but only have ${invCoinTotal()}.")
             return
         }
-        if (!invTakeFee(totalCost.toInt())) {
+        if (!invTakeFee(totalCost)) {
             mes("Not enough coins to escrow the buy order.")
             return
         }
-        val slot = freeSlot(accountId)
         val placement =
             GeState.book.placeBuy(
                 accountId = accountId,
                 slot = slot,
-                itemId = itemId,
+                itemId = type.id,
                 quantity = qty,
                 pricePer = price,
                 now = System.currentTimeMillis(),
             )
-        persistOffer(placement.offer)
-        persistTrades(placement.trades)
-        updateResting(placement.trades)
+        persist(placement.touched, placement.trades)
         val name = itemName(type)
-        if (placement.offer.state == GeOfferState.COMPLETED) {
-            mes(
-                "Buy order filled instantly: ${placement.offer.itemsFilled} x ${name}. ::ge collect to claim."
-            )
+        if (placement.offer.state == GeOfferState.Completed) {
+            mes("Buy order filled instantly: $qty x $name. ::ge collect to claim.")
         } else {
-            mes("Buy offer placed: ${qty} x ${name} @ ${price} gp each.")
+            mes("Buy offer placed in slot $slot: $qty x $name @ $price gp each.")
         }
     }
 
     private suspend fun ProtectedAccess.sell(parts: List<String>) {
-        if (parts.size < 4) {
-            mes("Usage: ::ge sell <item id> <qty> <price each>")
-            return
-        }
-        val itemId = parts[1].toIntOrNull()
-        val qty = parts[2].toIntOrNull()
-        val price = parts[3].toLongOrNull()
-        if (itemId == null || qty == null || price == null || qty <= 0 || price <= 0) {
-            mes("Invalid item id, quantity or price.")
-            return
-        }
-        val type = objTypes[itemId]
-        if (type == null) {
-            mes("Unknown item id: $itemId")
-            return
-        }
+        val (type, qty, price) = parseOfferArgs("sell", parts) ?: return
         val accountId = player.accountId
-        val active = GeState.book.activeOffersForAccount(accountId)
-        if (active.size >= GeTypes.MAX_SLOTS_PER_ACCOUNT) {
-            mes(
-                "You already have ${active.size} active offers (max ${GeTypes.MAX_SLOTS_PER_ACCOUNT})."
-            )
+        val slot = claimSlot(accountId) ?: return
+        val noted = if (type.canCert) objTypes.cert(type) else null
+        val haveUnnoted = invTotal(inv, type)
+        val haveNoted = if (noted != null) invTotal(inv, noted) else 0
+        if (haveUnnoted.toLong() + haveNoted < qty) {
+            mes("You only have ${haveUnnoted.toLong() + haveNoted} x ${itemName(type)}.")
             return
         }
-        if (invTotal(inv, type) < qty) {
-            mes("You only have ${invTotal(inv, type)} x ${itemName(type)}.")
+        val fromUnnoted = minOf(haveUnnoted, qty)
+        val fromNoted = qty - fromUnnoted
+        if (fromUnnoted > 0 && invDel(inv, type, fromUnnoted).failure) {
+            mes("Could not remove the items from your inventory.")
             return
         }
-        invDel(inv, type, qty)
-        val slot = freeSlot(accountId)
+        if (noted != null && fromNoted > 0 && invDel(inv, noted, fromNoted).failure) {
+            // Return what was already taken so a failed listing never costs the player items.
+            invAdd(inv, type, fromUnnoted, strict = false)
+            mes("Could not remove the items from your inventory.")
+            return
+        }
         val placement =
             GeState.book.placeSell(
                 accountId = accountId,
                 slot = slot,
-                itemId = itemId,
+                itemId = type.id,
                 quantity = qty,
                 pricePer = price,
                 now = System.currentTimeMillis(),
             )
-        persistOffer(placement.offer)
-        persistTrades(placement.trades)
-        updateResting(placement.trades)
+        persist(placement.touched, placement.trades)
         val name = itemName(type)
-        if (placement.offer.state == GeOfferState.COMPLETED) {
+        if (placement.offer.state == GeOfferState.Completed) {
             val net = GeState.book.sellerProceeds(placement.offer)
-            mes(
-                "Sell order filled instantly: ${placement.offer.itemsFilled} x ${name}. Collect ${net} gp via ::ge collect."
-            )
+            mes("Sell order filled instantly: $qty x $name. Collect $net gp via ::ge collect.")
         } else {
-            mes("Sell offer placed: ${qty} x ${name} @ ${price} gp each.")
+            mes("Sell offer placed in slot $slot: $qty x $name @ $price gp each.")
         }
     }
 
-    private suspend fun ProtectedAccess.listOffers() {
-        val accountId = player.accountId
-        val active = GeState.book.activeOffersForAccount(accountId)
-        if (active.isEmpty()) {
-            mes("You have no active Grand Exchange offers.")
+    private fun ProtectedAccess.listOffers() {
+        val pending = GeState.book.pendingOffersForAccount(player.accountId).sortedBy { it.slot }
+        if (pending.isEmpty()) {
+            mes("You have no Grand Exchange offers.")
             return
         }
-        mes("Your offers (slot | type | item | progress @ price):")
-        for (offer in active) {
+        mes("Your offers (slot | type | item | filled/total @ price | state):")
+        for (offer in pending) {
             val name = itemName(objTypes[offer.itemId])
             mes(
-                "[${offer.slot}] ${offer.type} ${name}: " +
-                    "${offer.quantity - offer.remaining}/${offer.quantity} @ ${offer.pricePer} gp"
+                "[${offer.slot}] ${offer.type} $name: " +
+                    "${offer.itemsFilled}/${offer.quantity} @ ${offer.pricePer} gp | ${offer.state}"
             )
         }
     }
 
-    private suspend fun ProtectedAccess.cancel(parts: List<String>) {
+    private fun ProtectedAccess.cancel(parts: List<String>) {
         val slot = parts.getOrNull(1)?.toIntOrNull()
         if (slot == null) {
             mes("Usage: ::ge cancel <slot>")
@@ -206,95 +221,103 @@ constructor(
             mes("No active offer in slot $slot.")
             return
         }
-        GeState.book.cancel(offer.id)
-        persistState(offer)
+        val snapshot = GeState.book.cancel(offer.id) ?: return
+        persist(listOf(snapshot), emptyList())
         when (offer.type) {
-            GeOfferType.BUY -> {
+            GeOfferType.Buy -> {
                 val refund = GeState.book.buyerRefund(offer)
-                mes("Offer cancelled. ::ge collect to reclaim ${refund} gp and any items.")
+                mes("Offer cancelled. ::ge collect to reclaim $refund gp and any items.")
             }
-            GeOfferType.SELL -> {
+            GeOfferType.Sell -> {
                 mes("Offer cancelled. ::ge collect to reclaim your ${offer.remaining} items.")
             }
         }
     }
 
-    private suspend fun ProtectedAccess.collect() {
+    /**
+     * Hands back every finished offer that fits. Each offer is all-or-nothing: if its items or gold
+     * do not fit, it stays uncollected (nothing is dropped on the floor or lost) and collection
+     * stops there.
+     */
+    private fun ProtectedAccess.collect() {
         val accountId = player.accountId
-        val pending = GeState.book.pendingOffersForAccount(accountId)
-        if (pending.isEmpty()) {
+        val finished =
+            GeState.book.pendingOffersForAccount(accountId).filter {
+                it.state != GeOfferState.Active
+            }
+        if (finished.isEmpty()) {
             mes("Nothing to collect at the Grand Exchange.")
             return
         }
         val coins = objTypes[COINS] ?: return
+        val collected = mutableListOf<GeOffer>()
         var goldOut = 0L
         var itemsOut = 0
-        var itemTypesOut = mutableMapOf<Int, Int>()
-        for (offer in pending) {
-            if (offer.state == GeOfferState.ACTIVE) {
-                // Active offers keep working; only completed/cancelled are collected.
+        var blocked = false
+        for (offer in finished) {
+            val type = objTypes[offer.itemId]
+            val items = offer.collectableItems
+            val gold = offer.collectableGold
+            if (items > 0 && type == null) {
+                logger.error { "GE offer ${offer.id} holds unknown item ${offer.itemId}" }
                 continue
             }
-            when (offer.type) {
-                GeOfferType.BUY -> {
-                    if (offer.itemsFilled > 0) {
-                        val type = objTypes[offer.itemId]
-                        if (type != null && invAddOrDrop(objRepo, type, offer.itemsFilled)) {
-                            itemsOut += offer.itemsFilled
-                            itemTypesOut[offer.itemId] =
-                                (itemTypesOut[offer.itemId] ?: 0) + offer.itemsFilled
-                        }
-                    }
-                    goldOut += GeState.book.buyerRefund(offer)
-                }
-                GeOfferType.SELL -> {
-                    goldOut += GeState.book.sellerProceeds(offer)
-                    if (offer.remaining > 0) {
-                        val type = objTypes[offer.itemId]
-                        if (type != null && invAddOrDrop(objRepo, type, offer.remaining)) {
-                            itemsOut += offer.remaining
-                            itemTypesOut[offer.itemId] =
-                                (itemTypesOut[offer.itemId] ?: 0) + offer.remaining
-                        }
-                    }
-                }
+            if (invCoinTotal().toLong() + gold > Int.MAX_VALUE) {
+                blocked = true
+                break
             }
-            GeState.book.markCollected(offer.id)
-            persistState(offer)
-        }
-        if (goldOut > 0) {
-            if (goldOut > Int.MAX_VALUE) {
-                mes("Collection too large - contact an admin.")
-                return
+            val noteItems = type != null && items > 1 && !type.isStackable && type.canCert
+            if (type != null && items > 0 && invAdd(inv, type, items, cert = noteItems).failure) {
+                blocked = true
+                break
             }
-            invAddOrDrop(objRepo, coins, goldOut.toInt())
+            if (gold > 0 && invAdd(inv, coins, gold.toInt()).failure) {
+                if (type != null && items > 0) {
+                    val given = if (noteItems) objTypes.cert(type) else type
+                    invDel(inv, given, items)
+                }
+                blocked = true
+                break
+            }
+            GeState.book.markCollected(offer.id)?.let(collected::add)
+            goldOut += gold
+            itemsOut += items
         }
-        mes("Collected: ${goldOut} gp, ${itemsOut} item(s).")
+        persist(collected, emptyList())
+        if (collected.isNotEmpty()) {
+            mes("Collected: $goldOut gp, $itemsOut item(s).")
+        }
+        if (blocked) {
+            mes("Not enough inventory space to collect everything - make room and ::ge collect.")
+        }
     }
 
-    private suspend fun ProtectedAccess.price(parts: List<String>) {
+    private fun ProtectedAccess.price(parts: List<String>) {
         val itemId = parts.getOrNull(1)?.toIntOrNull()
         if (itemId == null) {
             mes("Usage: ::ge price <item id>")
             return
         }
-        val type = objTypes[itemId]
-        if (type == null) {
+        val requested = objTypes[itemId]
+        if (requested == null) {
             mes("Unknown item id: $itemId")
             return
         }
+        val type = objTypes.uncert(requested)
         val name = itemName(type)
+        val playerUid = player.uid
         db.request(
-            request = { conn -> GameDbResult.Ok(recentPrices(conn, itemId)) },
-            response = { result ->
+            request = { conn -> GameDbResult.Ok(recentPrices(conn, type.id)) },
+            response = response@{ result ->
+                val player = playerUid.resolve(playerList) ?: return@response
                 result.fold(
                     onOk = { rows ->
                         if (rows.isEmpty()) {
-                            player.mes("No recent trades for ${name}.")
+                            player.mes("No recent trades for $name.")
                         } else {
-                            player.mes("Recent trades for ${name}:")
-                            for (row in rows) {
-                                player.mes("  ${row.second} x @ ${row.first} gp")
+                            player.mes("Recent trades for $name:")
+                            for ((pricePer, qty) in rows) {
+                                player.mes("  $qty x @ $pricePer gp")
                             }
                         }
                     },
@@ -304,137 +327,122 @@ constructor(
         )
     }
 
-    private fun freeSlot(accountId: Int): Int {
-        val used = GeState.book.activeOffersForAccount(accountId).map { it.slot }.toSet()
-        for (slot in 0 until GeTypes.MAX_SLOTS_PER_ACCOUNT) {
-            if (slot !in used) {
-                return slot
-            }
-        }
-        return GeTypes.MAX_SLOTS_PER_ACCOUNT - 1
-    }
+    private fun itemName(type: UnpackedObjType?): String =
+        type?.name?.takeIf(String::isNotBlank) ?: type?.internalName ?: "item"
 
-    private fun itemName(type: org.rsmod.game.type.obj.ObjType?): String =
-        type?.internalName ?: "item"
-
-    private fun persistOffer(offer: GeOffer) {
-        db.request(
-            request = { conn -> GameDbResult.Ok(insertOffer(conn, offer)) },
-            response = { _ -> },
-        )
-    }
-
-    private fun persistTrades(trades: List<GeTrade>) {
-        if (trades.isEmpty()) {
+    /**
+     * Writes offer snapshots and trades in a single request, which the gateway runs as one
+     * transaction. Offer upserts are revision-guarded and trade inserts are keyed by offer pair, so
+     * reordered or retried requests are harmless.
+     */
+    private fun persist(offers: List<GeOffer>, trades: List<GeTrade>) {
+        if (offers.isEmpty() && trades.isEmpty()) {
             return
         }
         db.request(
             request = { conn ->
+                for (offer in offers) {
+                    upsertOffer(conn, offer)
+                }
                 for (trade in trades) {
                     insertTrade(conn, trade)
                 }
-                GameDbResult.Ok(trades.size)
+                GameDbResult.Ok(Unit)
             },
-            response = { _ -> },
-        )
-    }
-
-    private fun updateResting(trades: List<GeTrade>) {
-        if (trades.isEmpty()) {
-            return
-        }
-        val touched = trades.map { listOf(it.buyerAccountId, it.sellerAccountId) }.flatten().toSet()
-        for (offer in GeState.book.allOffers()) {
-            if (offer.accountId in touched && offer.state != GeOfferState.ACTIVE) {
-                persistState(offer)
-            }
-        }
-    }
-
-    private fun persistState(offer: GeOffer) {
-        db.request(
-            request = { conn -> GameDbResult.Ok(updateOfferState(conn, offer)) },
-            response = { _ -> },
-        )
-    }
-
-    private fun restoreOffers() {
-        db.request(
-            request = { conn -> GameDbResult.Ok(loadOffers(conn)) },
             response = { result ->
                 result.fold(
-                    onOk = { offers ->
-                        for (offer in offers) {
-                            GeState.book.restore(offer)
+                    onOk = {},
+                    onErr = { err ->
+                        logger.error {
+                            "Failed to persist GE state (offers=${offers.map(GeOffer::id)}, " +
+                                "trades=${trades.size}): $err"
                         }
                     },
-                    onErr = {},
                 )
             },
         )
     }
 
-    private fun insertOffer(conn: DatabaseConnection, offer: GeOffer): Int {
+    private fun restoreOffers() {
+        if (GeState.ready || GeState.restoring) {
+            return
+        }
+        GeState.restoring = true
+        db.request(
+            request = { conn -> GameDbResult.Ok(loadOffers(conn) to maxOfferId(conn)) },
+            response = { result ->
+                GeState.restoring = false
+                result.fold(
+                    onOk = { (offers, maxId) ->
+                        for (offer in offers) {
+                            GeState.book.restore(offer)
+                        }
+                        GeState.book.ensureNextIdAbove(maxId)
+                        GeState.ready = true
+                        logger.info { "Grand Exchange restored ${offers.size} offer(s)." }
+                    },
+                    onErr = { err ->
+                        logger.error { "Failed to restore Grand Exchange offers: $err" }
+                    },
+                )
+            },
+        )
+    }
+
+    private fun upsertOffer(conn: DatabaseConnection, offer: GeOffer) {
         val stmt =
             conn.prepareStatement(
-                "INSERT OR REPLACE INTO ge_offers " +
+                "INSERT INTO ge_offers " +
                     "(id, account_id, slot, type, item_id, quantity, remaining, price_per, " +
-                    "gold_escrow, gold_spent, proceeds_gold, items_filled, tax_paid, state) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                    "gold_escrow, gold_spent, proceeds_gold, items_filled, tax_paid, state, revision) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+                    "ON CONFLICT(id) DO UPDATE SET " +
+                    "remaining = excluded.remaining, gold_spent = excluded.gold_spent, " +
+                    "proceeds_gold = excluded.proceeds_gold, items_filled = excluded.items_filled, " +
+                    "tax_paid = excluded.tax_paid, state = excluded.state, " +
+                    "revision = excluded.revision, updated_at = CURRENT_TIMESTAMP " +
+                    "WHERE excluded.revision > ge_offers.revision"
             )
-        stmt.setLong(1, offer.id)
-        stmt.setInt(2, offer.accountId)
-        stmt.setInt(3, offer.slot)
-        stmt.setString(4, offer.type.name)
-        stmt.setInt(5, offer.itemId)
-        stmt.setInt(6, offer.quantity)
-        stmt.setInt(7, offer.remaining)
-        stmt.setLong(8, offer.pricePer)
-        stmt.setLong(9, offer.goldEscrow)
-        stmt.setLong(10, offer.goldSpent)
-        stmt.setLong(11, offer.proceedsGold)
-        stmt.setInt(12, offer.itemsFilled)
-        stmt.setLong(13, offer.taxPaid)
-        stmt.setString(14, offer.state.name)
-        val rows = stmt.executeUpdate()
-        stmt.close()
-        return rows
+        stmt.use {
+            it.setLong(1, offer.id)
+            it.setInt(2, offer.accountId)
+            it.setInt(3, offer.slot)
+            it.setString(4, offer.type.dbValue)
+            it.setInt(5, offer.itemId)
+            it.setInt(6, offer.quantity)
+            it.setInt(7, offer.remaining)
+            it.setLong(8, offer.pricePer)
+            it.setLong(9, offer.goldEscrow)
+            it.setLong(10, offer.goldSpent)
+            it.setLong(11, offer.proceedsGold)
+            it.setInt(12, offer.itemsFilled)
+            it.setLong(13, offer.taxPaid)
+            it.setString(14, offer.state.dbValue)
+            it.setLong(15, offer.revision)
+            it.executeUpdate()
+        }
     }
 
     private fun insertTrade(conn: DatabaseConnection, trade: GeTrade) {
         val stmt =
             conn.prepareStatement(
-                "INSERT INTO ge_history " +
-                    "(item_id, quantity, price_per, gross, tax, buyer_account_id, seller_account_id) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)"
+                "INSERT OR IGNORE INTO ge_history " +
+                    "(item_id, quantity, price_per, gross, tax, buyer_account_id, " +
+                    "seller_account_id, buy_offer_id, sell_offer_id) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )
-        stmt.setInt(1, trade.itemId)
-        stmt.setInt(2, trade.qty)
-        stmt.setLong(3, trade.pricePer)
-        stmt.setLong(4, trade.gross)
-        stmt.setLong(5, trade.tax)
-        stmt.setInt(6, trade.buyerAccountId)
-        stmt.setInt(7, trade.sellerAccountId)
-        stmt.executeUpdate()
-        stmt.close()
-    }
-
-    private fun updateOfferState(conn: DatabaseConnection, offer: GeOffer): Int {
-        val stmt =
-            conn.prepareStatement(
-                "UPDATE ge_offers SET state = ?, remaining = ?, gold_spent = ?, proceeds_gold = ?, " +
-                    "items_filled = ?, tax_paid = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-            )
-        stmt.setString(1, offer.state.name)
-        stmt.setInt(2, offer.remaining)
-        stmt.setLong(3, offer.goldSpent)
-        stmt.setLong(4, offer.proceedsGold)
-        stmt.setInt(5, offer.itemsFilled)
-        stmt.setLong(6, offer.taxPaid)
-        stmt.setLong(7, offer.id)
-        val rows = stmt.executeUpdate()
-        stmt.close()
-        return rows
+        stmt.use {
+            it.setInt(1, trade.itemId)
+            it.setInt(2, trade.qty)
+            it.setLong(3, trade.pricePer)
+            it.setLong(4, trade.gross)
+            it.setLong(5, trade.tax)
+            it.setInt(6, trade.buyerAccountId)
+            it.setInt(7, trade.sellerAccountId)
+            it.setLong(8, trade.buyOfferId)
+            it.setLong(9, trade.sellOfferId)
+            it.executeUpdate()
+        }
     }
 
     private fun loadOffers(conn: DatabaseConnection): List<GeOffer> {
@@ -442,51 +450,58 @@ constructor(
             conn.prepareStatement(
                 "SELECT id, account_id, slot, type, item_id, quantity, remaining, price_per, " +
                     "gold_escrow, gold_spent, proceeds_gold, items_filled, tax_paid, state, " +
-                    "CAST(strftime('%s', created_at) AS INTEGER) * 1000 FROM ge_offers " +
+                    "CAST(strftime('%s', created_at) AS INTEGER) * 1000, revision FROM ge_offers " +
                     "WHERE state IN ('ACTIVE', 'COMPLETED', 'CANCELLED')"
             )
-        val rs = stmt.executeQuery()
         val offers = mutableListOf<GeOffer>()
-        while (rs.next()) {
-            val offer =
-                GeOffer(
-                    id = rs.getLong(1),
-                    accountId = rs.getInt(2),
-                    slot = rs.getInt(3),
-                    type = GeOfferType.valueOf(rs.getString(4)),
-                    itemId = rs.getInt(5),
-                    quantity = rs.getInt(6),
-                    remaining = rs.getInt(7),
-                    pricePer = rs.getLong(8),
-                    goldEscrow = rs.getLong(9),
-                    goldSpent = rs.getLong(10),
-                    proceedsGold = rs.getLong(11),
-                    itemsFilled = rs.getInt(12),
-                    taxPaid = rs.getLong(13),
-                    state = GeOfferState.valueOf(rs.getString(14)),
-                    createdAtMs = rs.getLong(15),
-                )
-            offers.add(offer)
+        stmt.use {
+            it.executeQuery().use { rs ->
+                while (rs.next()) {
+                    offers +=
+                        GeOffer(
+                            id = rs.getLong(1),
+                            accountId = rs.getInt(2),
+                            slot = rs.getInt(3),
+                            type = GeOfferType.fromDb(rs.getString(4)),
+                            itemId = rs.getInt(5),
+                            quantity = rs.getInt(6),
+                            remaining = rs.getInt(7),
+                            pricePer = rs.getLong(8),
+                            goldEscrow = rs.getLong(9),
+                            goldSpent = rs.getLong(10),
+                            proceedsGold = rs.getLong(11),
+                            itemsFilled = rs.getInt(12),
+                            taxPaid = rs.getLong(13),
+                            state = GeOfferState.fromDb(rs.getString(14)),
+                            createdAtMs = rs.getLong(15),
+                            revision = rs.getLong(16),
+                        )
+                }
+            }
         }
-        rs.close()
-        stmt.close()
         return offers
+    }
+
+    private fun maxOfferId(conn: DatabaseConnection): Long {
+        val stmt = conn.prepareStatement("SELECT COALESCE(MAX(id), 0) FROM ge_offers")
+        return stmt.use { it.executeQuery().use { rs -> if (rs.next()) rs.getLong(1) else 0L } }
     }
 
     private fun recentPrices(conn: DatabaseConnection, itemId: Int): List<Pair<Long, Int>> {
         val stmt =
             conn.prepareStatement(
                 "SELECT price_per, quantity FROM ge_history WHERE item_id = ? " +
-                    "ORDER BY traded_at DESC LIMIT 5"
+                    "ORDER BY traded_at DESC, id DESC LIMIT 5"
             )
-        stmt.setInt(1, itemId)
-        val rs = stmt.executeQuery()
         val rows = mutableListOf<Pair<Long, Int>>()
-        while (rs.next()) {
-            rows.add(Pair(rs.getLong(1), rs.getInt(2)))
+        stmt.use {
+            it.setInt(1, itemId)
+            it.executeQuery().use { rs ->
+                while (rs.next()) {
+                    rows += rs.getLong(1) to rs.getInt(2)
+                }
+            }
         }
-        rs.close()
-        stmt.close()
         return rows
     }
 

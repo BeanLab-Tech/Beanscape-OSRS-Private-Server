@@ -5,6 +5,12 @@
 **Architecture:** RsMod rev 233 + RSProx (RuneLite fork) + Tailscale-only networking  
 **Status:** Criteria 1, 2, 3, 4 — all complete and verified
 
+> **Errata (2026-10-29):** see [`AUDIT_2026-10-29.md`](AUDIT_2026-10-29.md). In short: the `dev`
+> realm also had `ignore_passwords=1` + `dev_mode=1` (any password accepted, every new account
+> `owner`), fixed by V9; `::name` was admin-only and had none of the validation described in
+> Phase 6; the GE had persistence bugs that could duplicate items after a restart; passwords are
+> Argon2**i** (`Type.I`), not Argon2id. This report is kept as the historical record.
+
 ---
 
 ## Table of Contents

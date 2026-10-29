@@ -2,27 +2,53 @@ package org.rsmod.content.other.grandexchange
 
 /**
  * Pure Grand Exchange matching engine: price-time priority, resting-offer pricing, 2% seller tax
- * (exempt below 100 gp per item, capped at 5m per trade), escrowed buy offers with refunds, partial
- * fills.
+ * per item (exempt below 100 gp per item, capped at 5m per item), escrowed buy offers with refunds,
+ * partial fills.
  */
 public object GeTypes {
     public const val TAX_RATE_NUMERATOR: Long = 2
     public const val TAX_RATE_DENOMINATOR: Long = 100
-    public const val TAX_CAP: Long = 5_000_000L
+    public const val TAX_CAP_PER_ITEM: Long = 5_000_000L
     public const val TAX_EXEMPT_BELOW_PRICE: Long = 100L
     public const val MAX_SLOTS_PER_ACCOUNT: Int = 8
+
+    /** Every offer total (and therefore every collectable gold amount) must fit in a coin stack. */
+    public const val MAX_OFFER_VALUE: Long = Int.MAX_VALUE.toLong()
+
+    /** Seller tax for a fill of [qty] items at [pricePer] each. */
+    public fun taxOn(qty: Int, pricePer: Long): Long {
+        if (pricePer < TAX_EXEMPT_BELOW_PRICE) {
+            return 0L
+        }
+        val perItem = minOf(pricePer * TAX_RATE_NUMERATOR / TAX_RATE_DENOMINATOR, TAX_CAP_PER_ITEM)
+        return perItem * qty
+    }
 }
 
-public enum class GeOfferType {
-    BUY,
-    SELL,
+/** [dbValue] is what the `ge_offers.type` column stores (see the V7 CHECK constraint). */
+public enum class GeOfferType(public val dbValue: String) {
+    Buy("BUY"),
+    Sell("SELL");
+
+    public companion object {
+        public fun fromDb(value: String): GeOfferType =
+            entries.firstOrNull { it.dbValue == value }
+                ?: throw IllegalArgumentException("Unknown GE offer type: $value")
+    }
 }
 
-public enum class GeOfferState {
-    ACTIVE,
-    COMPLETED,
-    CANCELLED,
-    COLLECTED,
+/** [dbValue] is what the `ge_offers.state` column stores (see the V7 CHECK constraint). */
+public enum class GeOfferState(public val dbValue: String) {
+    Active("ACTIVE"),
+    Completed("COMPLETED"),
+    Cancelled("CANCELLED"),
+    Collected("COLLECTED");
+
+    public companion object {
+        public fun fromDb(value: String): GeOfferState =
+            entries.firstOrNull { it.dbValue == value }
+                ?: throw IllegalArgumentException("Unknown GE offer state: $value")
+    }
 }
 
 public data class GeOffer(
@@ -39,9 +65,30 @@ public data class GeOffer(
     public var proceedsGold: Long = 0L,
     public var itemsFilled: Int = 0,
     public var taxPaid: Long = 0L,
-    public var state: GeOfferState = GeOfferState.ACTIVE,
+    public var state: GeOfferState = GeOfferState.Active,
     public val createdAtMs: Long,
-)
+    /**
+     * Bumped on every mutation. Persistence only overwrites a stored row with a higher revision, so
+     * out-of-order or retried database writes can never roll an offer back to a stale state.
+     */
+    public var revision: Long = 0L,
+) {
+    /** Gold this offer can hand back on collection: unspent escrow (buy) or net proceeds (sell). */
+    public val collectableGold: Long
+        get() =
+            when (type) {
+                GeOfferType.Buy -> goldEscrow - goldSpent
+                GeOfferType.Sell -> proceedsGold
+            }
+
+    /** Items this offer can hand back on collection: fills (buy) or unsold stock (sell). */
+    public val collectableItems: Int
+        get() =
+            when (type) {
+                GeOfferType.Buy -> itemsFilled
+                GeOfferType.Sell -> remaining
+            }
+}
 
 public data class GeTrade(
     public val itemId: Int,
@@ -52,38 +99,51 @@ public data class GeTrade(
     public val netToSeller: Long,
     public val buyerAccountId: Int,
     public val sellerAccountId: Int,
+    public val buyOfferId: Long,
+    public val sellOfferId: Long,
 )
 
-public data class GePlacement(public val offer: GeOffer, public val trades: List<GeTrade>) {
-    public val filledImmediately: Int
-        get() = offer.itemsFilled
-
-    public val proceedsGold: Long
-        get() = offer.proceedsGold
-}
+/**
+ * Result of placing an offer. [touched] holds immutable snapshots of every offer whose state changed
+ * (the new offer plus each resting counterparty), taken at placement time so they can be persisted
+ * off the game thread without racing later mutations.
+ */
+public data class GePlacement(
+    public val offer: GeOffer,
+    public val trades: List<GeTrade>,
+    public val touched: List<GeOffer>,
+)
 
 public class GeBook {
     private val offers = LinkedHashMap<Long, GeOffer>()
     private var nextId = 1L
 
     public fun activeOffersForAccount(accountId: Int): List<GeOffer> =
-        offers.values.filter { it.accountId == accountId && it.state == GeOfferState.ACTIVE }
+        offers.values.filter { it.accountId == accountId && it.state == GeOfferState.Active }
 
-    /** All offers for an account that still hold collectables (not yet collected). */
+    /** All offers for an account that still occupy a slot (not yet collected). */
     public fun pendingOffersForAccount(accountId: Int): List<GeOffer> =
-        offers.values.filter { it.accountId == accountId && it.state != GeOfferState.COLLECTED }
+        offers.values.filter { it.accountId == accountId && it.state != GeOfferState.Collected }
 
     public fun offer(id: Long): GeOffer? = offers[id]
 
     public fun activeOffersForItem(itemId: Int): List<GeOffer> =
-        offers.values.filter { it.itemId == itemId && it.state == GeOfferState.ACTIVE }
+        offers.values.filter { it.itemId == itemId && it.state == GeOfferState.Active }
 
     /** Snapshot of every offer currently tracked by the book. */
     public fun allOffers(): List<GeOffer> = offers.values.toList()
 
+    /** Lowest free slot for [accountId], or `null` if every slot holds an uncollected offer. */
+    public fun freeSlot(accountId: Int): Int? {
+        val used = pendingOffersForAccount(accountId).mapTo(HashSet()) { it.slot }
+        return (0 until GeTypes.MAX_SLOTS_PER_ACCOUNT).firstOrNull { it !in used }
+    }
+
     /** Restores an offer persisted in a previous server run. */
     public fun restore(offer: GeOffer) {
-        offers[offer.id] = offer
+        if (offer.state != GeOfferState.Collected) {
+            offers[offer.id] = offer
+        }
         ensureNextIdAbove(offer.id)
     }
 
@@ -100,13 +160,7 @@ public class GeBook {
         quantity: Int,
         pricePer: Long,
         now: Long,
-    ): GePlacement {
-        val offer = createOffer(GeOfferType.BUY, accountId, slot, itemId, quantity, pricePer, now)
-        offers[offer.id] = offer
-        val trades = match(offer)
-        finishIfDone(offer)
-        return GePlacement(offer, trades)
-    }
+    ): GePlacement = place(GeOfferType.Buy, accountId, slot, itemId, quantity, pricePer, now)
 
     public fun placeSell(
         accountId: Int,
@@ -115,12 +169,29 @@ public class GeBook {
         quantity: Int,
         pricePer: Long,
         now: Long,
+    ): GePlacement = place(GeOfferType.Sell, accountId, slot, itemId, quantity, pricePer, now)
+
+    private fun place(
+        type: GeOfferType,
+        accountId: Int,
+        slot: Int,
+        itemId: Int,
+        quantity: Int,
+        pricePer: Long,
+        now: Long,
     ): GePlacement {
-        val offer = createOffer(GeOfferType.SELL, accountId, slot, itemId, quantity, pricePer, now)
+        require(quantity > 0) { "quantity must be positive: $quantity" }
+        require(pricePer > 0) { "pricePer must be positive: $pricePer" }
+        require(quantity.toLong() * pricePer <= GeTypes.MAX_OFFER_VALUE) {
+            "offer value exceeds ${GeTypes.MAX_OFFER_VALUE}: $quantity x $pricePer"
+        }
+        val offer = createOffer(type, accountId, slot, itemId, quantity, pricePer, now)
         offers[offer.id] = offer
-        val trades = match(offer)
+        val counterparties = mutableListOf<GeOffer>()
+        val trades = match(offer, counterparties)
         finishIfDone(offer)
-        return GePlacement(offer, trades)
+        val touched = (listOf(offer) + counterparties).map { it.copy() }
+        return GePlacement(offer, trades, touched)
     }
 
     private fun createOffer(
@@ -141,21 +212,34 @@ public class GeBook {
             quantity = quantity,
             remaining = quantity,
             pricePer = pricePer,
-            goldEscrow = if (type == GeOfferType.BUY) quantity.toLong() * pricePer else 0L,
+            goldEscrow = if (type == GeOfferType.Buy) quantity.toLong() * pricePer else 0L,
             createdAtMs = now,
         )
 
+    /** Cancels an active offer and returns a snapshot of it, or `null` if it was not active. */
     public fun cancel(offerId: Long): GeOffer? {
         val offer = offers[offerId] ?: return null
-        if (offer.state != GeOfferState.ACTIVE) {
+        if (offer.state != GeOfferState.Active) {
             return null
         }
-        offer.state = GeOfferState.CANCELLED
-        return offer
+        offer.state = GeOfferState.Cancelled
+        offer.revision++
+        return offer.copy()
     }
 
-    public fun markCollected(offerId: Long) {
-        offers[offerId]?.state = GeOfferState.COLLECTED
+    /**
+     * Marks a completed or cancelled offer as collected, drops it from the book and returns a
+     * snapshot of it, or `null` if it is unknown or still active.
+     */
+    public fun markCollected(offerId: Long): GeOffer? {
+        val offer = offers[offerId] ?: return null
+        if (offer.state == GeOfferState.Active || offer.state == GeOfferState.Collected) {
+            return null
+        }
+        offer.state = GeOfferState.Collected
+        offer.revision++
+        offers.remove(offerId)
+        return offer.copy()
     }
 
     /** Buyer refund: escrow not spent on fills. */
@@ -164,19 +248,19 @@ public class GeBook {
     /** Seller collect: net proceeds after tax. */
     public fun sellerProceeds(offer: GeOffer): Long = offer.proceedsGold
 
-    private fun match(incoming: GeOffer): List<GeTrade> {
+    private fun match(incoming: GeOffer, counterparties: MutableList<GeOffer>): List<GeTrade> {
         val trades = mutableListOf<GeTrade>()
         val resting =
             offers.values
                 .filter {
-                    it.state == GeOfferState.ACTIVE &&
+                    it.state == GeOfferState.Active &&
                         it.id != incoming.id &&
                         it.itemId == incoming.itemId &&
                         it.type != incoming.type
                 }
                 .sortedWith(
                     compareBy(
-                        { if (incoming.type == GeOfferType.BUY) it.pricePer else -it.pricePer },
+                        { if (incoming.type == GeOfferType.Buy) it.pricePer else -it.pricePer },
                         { it.createdAtMs },
                         { it.id },
                     )
@@ -186,7 +270,7 @@ public class GeBook {
                 break
             }
             val crosses =
-                if (incoming.type == GeOfferType.BUY) {
+                if (incoming.type == GeOfferType.Buy) {
                     other.pricePer <= incoming.pricePer
                 } else {
                     other.pricePer >= incoming.pricePer
@@ -197,36 +281,18 @@ public class GeBook {
             val qty = minOf(incoming.remaining, other.remaining)
             val pricePer = other.pricePer
             val gross = qty.toLong() * pricePer
-            val tax = taxOn(gross, pricePer)
+            val tax = GeTypes.taxOn(qty, pricePer)
             val net = gross - tax
-            when (incoming.type) {
-                GeOfferType.BUY -> {
-                    incoming.goldSpent += gross
-                    incoming.remaining -= qty
-                    incoming.itemsFilled += qty
-                }
-                GeOfferType.SELL -> {
-                    incoming.proceedsGold += net
-                    incoming.remaining -= qty
-                    incoming.itemsFilled += qty
-                    incoming.taxPaid += tax
-                }
+            val buyer = if (incoming.type == GeOfferType.Buy) incoming else other
+            val seller = if (incoming.type == GeOfferType.Buy) other else incoming
+            buyer.goldSpent += gross
+            seller.proceedsGold += net
+            seller.taxPaid += tax
+            for (side in arrayOf(buyer, seller)) {
+                side.remaining -= qty
+                side.itemsFilled += qty
+                side.revision++
             }
-            when (other.type) {
-                GeOfferType.BUY -> {
-                    other.goldSpent += gross
-                    other.remaining -= qty
-                    other.itemsFilled += qty
-                }
-                GeOfferType.SELL -> {
-                    other.proceedsGold += net
-                    other.remaining -= qty
-                    other.itemsFilled += qty
-                    other.taxPaid += tax
-                }
-            }
-            val buyer = if (incoming.type == GeOfferType.BUY) incoming else other
-            val seller = if (incoming.type == GeOfferType.BUY) other else incoming
             trades.add(
                 GeTrade(
                     itemId = incoming.itemId,
@@ -237,24 +303,20 @@ public class GeBook {
                     netToSeller = net,
                     buyerAccountId = buyer.accountId,
                     sellerAccountId = seller.accountId,
+                    buyOfferId = buyer.id,
+                    sellOfferId = seller.id,
                 )
             )
             finishIfDone(other)
+            counterparties += other
         }
         return trades
     }
 
     private fun finishIfDone(offer: GeOffer) {
-        if (offer.remaining == 0 && offer.state == GeOfferState.ACTIVE) {
-            offer.state = GeOfferState.COMPLETED
+        if (offer.remaining == 0 && offer.state == GeOfferState.Active) {
+            offer.state = GeOfferState.Completed
+            offer.revision++
         }
-    }
-
-    private fun taxOn(gross: Long, pricePer: Long): Long {
-        if (pricePer < GeTypes.TAX_EXEMPT_BELOW_PRICE) {
-            return 0L
-        }
-        val raw = gross * GeTypes.TAX_RATE_NUMERATOR / GeTypes.TAX_RATE_DENOMINATOR
-        return minOf(raw, GeTypes.TAX_CAP)
     }
 }
