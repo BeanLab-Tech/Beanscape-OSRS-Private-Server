@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}BeanLab Admin{% endblock %}</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0f1117; --surface: #161922; --surface2: #1c2030;
+  --border: #252a3a; --text: #e4e7ee; --muted: #8b92a5;
+  --accent: #6c5ce7; --accent-h: #7c6ef0;
+  --success: #00b894; --warn: #fdcb6e; --danger: #e17055; --info: #74b9ff;
+  --radius: 8px; --shadow: 0 2px 12px rgba(0,0,0,.3);
+  --font: 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', 'Cascadia Code', monospace;
+}
+html { font-size: 15px; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-h); text-decoration: underline; }
+.layout { display: flex; min-height: 100vh; }
+.sidebar { width: 220px; background: var(--surface); border-right: 1px solid var(--border); padding: 1.25rem 0; flex-shrink: 0; display: flex; flex-direction: column; }
+.sidebar-logo { padding: 0 1.25rem 1.25rem; font-size: 1.1rem; font-weight: 700; letter-spacing: -.02em; border-bottom: 1px solid var(--border); margin-bottom: .75rem; }
+.sidebar-logo span { color: var(--accent); }
+.sidebar nav { flex: 1; }
+.sidebar nav a { display: block; padding: .5rem 1.25rem; color: var(--muted); font-size: .9rem; transition: all .15s; border-left: 3px solid transparent; }
+.sidebar nav a:hover { color: var(--text); background: var(--surface2); text-decoration: none; }
+.sidebar nav a.active { color: var(--text); background: var(--surface2); border-left-color: var(--accent); }
+.sidebar-footer { padding: .75rem 1.25rem 0; border-top: 1px solid var(--border); font-size: .75rem; color: var(--muted); }
+.main { flex: 1; padding: 1.5rem 2rem; max-width: 1200px; }
+h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 1.25rem; letter-spacing: -.02em; }
+h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: .75rem; }
+h3 { font-size: .95rem; font-weight: 600; margin-bottom: .5rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.muted { color: var(--muted); } .small { font-size: .8rem; }
+.mono { font-family: var(--mono); font-size: .85rem; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1rem; }
+.grid { display: grid; gap: 1rem; }
+.grid-2 { grid-template-columns: 1fr 1fr; }
+.grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+.grid-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.25rem; }
+.stat-card .label { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.stat-card .value { font-size: 1.8rem; font-weight: 700; margin-top: .25rem; }
+table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+th { text-align: left; padding: .6rem .75rem; color: var(--muted); font-weight: 600; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; border-bottom: 2px solid var(--border); }
+td { padding: .5rem .75rem; border-bottom: 1px solid var(--border); }
+tr:hover td { background: var(--surface2); }
+.btn { display: inline-block; padding: .45rem 1rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface2); color: var(--text); font-size: .85rem; font-weight: 500; cursor: pointer; transition: all .15s; font-family: var(--font); text-decoration: none; }
+.btn:hover { background: var(--border); text-decoration: none; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-h); border-color: var(--accent-h); }
+.btn-danger { background: transparent; border-color: var(--danger); color: var(--danger); }
+.btn-danger:hover { background: var(--danger); color: #fff; }
+.btn-success { background: transparent; border-color: var(--success); color: var(--success); }
+.btn-success:hover { background: var(--success); color: #fff; }
+.btn-sm { padding: .25rem .6rem; font-size: .8rem; }
+.btn-group { display: flex; gap: .5rem; flex-wrap: wrap; }
+.form-group { margin-bottom: 1rem; }
+.form-group label { display: block; font-size: .8rem; font-weight: 600; color: var(--muted); margin-bottom: .35rem; text-transform: uppercase; letter-spacing: .04em; }
+input, select, textarea { width: 100%; padding: .5rem .75rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font-size: .9rem; font-family: var(--font); transition: border-color .15s; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+input[type="checkbox"] { width: auto; }
+.form-row { display: flex; gap: 1rem; }
+.form-row .form-group { flex: 1; }
+.badge { display: inline-block; padding: .15rem .5rem; border-radius: 4px; font-size: .75rem; font-weight: 600; letter-spacing: .02em; }
+.badge-owner { background: rgba(108,92,231,.15); color: var(--accent); }
+.badge-admin { background: rgba(116,185,255,.15); color: var(--info); }
+.badge-moderator { background: rgba(0,184,148,.15); color: var(--success); }
+.badge-player { background: rgba(139,146,165,.15); color: var(--muted); }
+.badge-banned { background: rgba(225,112,85,.15); color: var(--danger); }
+.badge-online { background: rgba(0,184,148,.15); color: var(--success); }
+.badge-offline { background: rgba(139,146,165,.15); color: var(--muted); }
+.badge-main { background: rgba(0,184,148,.15); color: var(--success); }
+.badge-dev { background: rgba(253,203,110,.15); color: var(--warn); }
+.badge-success { background: rgba(0,184,148,.15); color: var(--success); }
+.badge-warn { background: rgba(253,203,110,.15); color: var(--warn); }
+.badge-error { background: rgba(225,112,85,.15); color: var(--danger); }
+.flash { padding: .75rem 1rem; border-radius: 6px; margin-bottom: 1rem; font-size: .9rem; border: 1px solid; }
+.flash-success { background: rgba(0,184,148,.1); border-color: rgba(0,184,148,.3); color: var(--success); }
+.flash-error { background: rgba(225,112,85,.1); border-color: rgba(225,112,85,.3); color: var(--danger); }
+.stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; }
+.stat-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: .6rem .75rem; }
+.stat-item .stat-name { font-size: .75rem; color: var(--muted); }
+.stat-item .stat-value { font-size: 1.1rem; font-weight: 700; margin-top: .15rem; }
+.stat-item .stat-xp { font-size: .7rem; color: var(--muted); }
+.item-card { display: flex; align-items: center; gap: .75rem; padding: .6rem .75rem; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; margin-bottom: .5rem; }
+.item-card img { width: 32px; height: 32px; image-rendering: pixelated; }
+.item-card .item-name { font-weight: 600; font-size: .9rem; }
+.item-card .item-meta { font-size: .75rem; color: var(--muted); }
+.item-card .item-actions { margin-left: auto; }
+.login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+.login-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 2.5rem; width: 380px; box-shadow: var(--shadow); }
+.login-card h1 { text-align: center; margin-bottom: 1.5rem; }
+.login-card h1 span { color: var(--accent); }
+.flex { display: flex; align-items: center; gap: .75rem; }
+.flex-between { display: flex; justify-content: space-between; align-items: center; }
+.mt-1 { margin-top: .5rem; } .mt-2 { margin-top: 1rem; }
+.mb-1 { margin-bottom: .5rem; } .mb-2 { margin-bottom: 1rem; }
+.text-right { text-align: right; } .text-center { text-align: center; }
+.w-full { width: 100%; } .hidden { display: none; }
+</style>
+{% block extra_style %}{% endblock %}
+</head>
+<body>
+{% block body %}
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-logo"><span>BeanLab</span> Admin</div>
+    <nav>
+      <a href="/admin/" class="{{ 'active' if active_nav == 'dashboard' else '' }}">Dashboard</a>
+      <a href="/admin/accounts" class="{{ 'active' if active_nav == 'accounts' else '' }}">Accounts</a>
+      <a href="/admin/characters" class="{{ 'active' if active_nav == 'characters' else '' }}">Characters</a>
+      <a href="/admin/items" class="{{ 'active' if active_nav == 'items' else '' }}">Items</a>
+      <a href="/admin/realms" class="{{ 'active' if active_nav == 'realms' else '' }}">Realms</a>
+    </nav>
+    <div class="sidebar-footer">
+      Signed in as <b>{{ user.get('user', 'admin') if user else 'admin' }}</b><br>
+      <a href="/admin/logout" class="small">Sign out</a>
+    </div>
+  </aside>
+  <main class="main">
+    {% if flash %}<div class="flash flash-success">{{ flash }}</div>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+{% endblock %}
+</body>
+</html>

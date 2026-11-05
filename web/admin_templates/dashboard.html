@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - BeanLab Admin{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+
+<div class="grid grid-4 mb-2">
+  <div class="stat-card">
+    <div class="label">Accounts</div>
+    <div class="value">{{ accounts }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Characters</div>
+    <div class="value">{{ chars }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Realms</div>
+    <div class="value">{{ realms | length }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Banned</div>
+    <div class="value">{{ banned_count if banned_count is defined else 0 }}</div>
+  </div>
+</div>
+
+<div class="card mb-2">
+  <h2>Service Status — <code>{{ service.unit }}</code></h2>
+  <div class="btn-group" style="flex-wrap:wrap">
+    <span class="badge {% if service.active == 'active' %}badge-success{% else %}badge-offline{% endif %}">osrs-server: {{ service.active }}</span>
+    <span class="badge badge-{{ 'success' if service.enabled == 'enabled' else 'offline' }}">enabled: {{ service.enabled }}</span>
+  </div>
+</div>
+
+<div class="grid grid-2">
+  <div class="card">
+    <h2>Recent Accounts</h2>
+    <table>
+      <tr><th>Username</th><th>Mod Level</th><th>Created</th></tr>
+      {% for acct in recent_accounts %}
+      <tr>
+        <td><a href="/admin/accounts/{{ acct.id }}">{{ acct.login_username }}</a></td>
+        <td><span class="badge badge-{{ acct.modlevel or 'player' }}">{{ acct.modlevel or 'player' }}</span></td>
+        <td class="muted small">{{ (acct.created_at or '')[:16] if acct.created_at else 'N/A' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3" class="muted">No accounts yet</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Realms</h2>
+    <table>
+      <tr><th>Name</th><th>Type</th><th>XP Rate</th><th>Status</th></tr>
+      {% for realm in realms %}
+      <tr>
+        <td><b>{{ realm.name }}</b></td>
+        <td>
+          {% if realm.dev_mode %}
+          <span class="badge badge-dev">DEV</span>
+          {% else %}
+          <span class="badge badge-main">MAIN</span>
+          {% endif %}
+        </td>
+        <td>{{ realm.global_xp_rate_in_hundreds }}%</td>
+        <td>
+          {% if realm.require_registration %}
+          <span class="badge badge-success">Reg Required</span>
+          {% else %}
+          <span class="badge badge-offline">Open</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    <div class="mt-1">
+      <a href="/admin/realms" class="btn btn-sm">Manage Realms</a>
+    </div>
+  </div>
+</div>
+
+<div class="card mt-2">
+  <h2>Service Log (last 60 lines, <code>{{ service.unit }}</code>)</h2>
+  <pre class="log">{{ logs | join('\n') if logs else '(no journal output)' }}</pre>
+</div>
+
+<div class="card mt-2">
+  <h2>Quick Actions</h2>
+  <div class="btn-group">
+    <a href="/admin/accounts/new" class="btn btn-primary">New Account</a>
+    <a href="/admin/items" class="btn">Spawn Item</a>
+    <a href="/admin/characters" class="btn">Browse Characters</a>
+    <a href="/admin/accounts" class="btn">All Accounts</a>
+  </div>
+</div>
+
+<p class="muted small mt-1">Last updated: {{ now }}</p>
+{% endblock %}

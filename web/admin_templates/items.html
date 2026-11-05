@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Items - BeanLab Admin{% endblock %}
+{% block content %}
+<h1>Items</h1>
+
+<div class="grid grid-2 mb-2">
+  <div class="card">
+    <h2>Search Items</h2>
+    <form method="get" action="/admin/items">
+      <div class="form-group">
+        <label for="q">Search OSRS items</label>
+        <input type="text" id="q" name="q" value="{{ query }}" placeholder="e.g. rotten potato, coins, dragon scimitar">
+      </div>
+      <button type="submit" class="btn btn-primary">Search</button>
+    </form>
+
+    {% if results %}
+    <h3 class="mt-2">Results ({{ results | length }})</h3>
+    {% for item in results %}
+    <div class="item-card">
+      <img src="https://osrs-images.t-cs.co/items/{{ item.id }}.png" alt="" onerror="this.style.display='none'">
+      <div>
+        <div class="item-name">{{ item.name }}</div>
+        <div class="item-meta">
+          obj {{ item.id }}
+          {% if item.members %} | Members{% endif %}
+          {% if item.stackable %} | Stackable{% endif %}
+          {% if item.ge_price %} | GE: {{ item.ge_price }}{% endif %}
+          {% if item.high_alch %} | Alch: {{ item.high_alch }}{% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+    {% elif query %}
+    <p class="muted mt-1">No items found for "{{ query }}".</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Spawn Item to Character</h2>
+    <p class="small muted mb-1">Search an item above, then enter a character ID to spawn it.</p>
+    <form method="post" action="/admin/items/spawn">
+      <div class="form-group">
+        <label for="char_id">Character ID</label>
+        <input type="number" id="char_id" name="char_id" required placeholder="e.g. 3">
+        <p class="small muted mt-1"><a href="/admin/characters">Browse characters</a></p>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="item_id">Item ID (from search)</label>
+          <input type="number" id="item_id" name="item_id" required placeholder="e.g. 5733">
+        </div>
+        <div class="form-group">
+          <label for="count">Quantity</label>
+          <input type="number" id="count" name="count" value="1" min="1" max="9999">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary">Spawn Item</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

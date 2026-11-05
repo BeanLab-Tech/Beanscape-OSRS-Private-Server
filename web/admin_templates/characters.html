@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Characters - BeanLab Admin{% endblock %}
+{% block content %}
+<h1>Characters</h1>
+
+<div class="card">
+  <table>
+    <tr>
+      <th>ID</th>
+      <th>Character</th>
+      <th>Account</th>
+      <th>Realm</th>
+      <th>Level</th>
+      <th>Position</th>
+      <th>Last Login</th>
+      <th>Account Status</th>
+      <th></th>
+    </tr>
+    {% for ch in characters %}
+    <tr>
+      <td class="muted">{{ ch.id }}</td>
+      <td><a href="/admin/characters/{{ ch.id }}"><b>{{ ch.display_name or ch.login_username }}</b></a></td>
+      <td class="small">{{ ch.login_username }}</td>
+      <td>
+        {% if ch.realm_id == 2 %}
+        <span class="badge badge-main">Main</span>
+        {% else %}
+        <span class="badge badge-dev">Dev</span>
+        {% endif %}
+      </td>
+      <td>{{ ch.level }}</td>
+      <td class="mono small">{{ ch.x }},{{ ch.z }}</td>
+      <td class="small muted">{{ (ch.last_login or '')[:16] if ch.last_login else 'Never' }}</td>
+      <td>
+        {% if ch.banned %}
+        <span class="badge badge-banned">Banned</span>
+        {% else %}
+        <span class="badge badge-{{ ch.modlevel }}">{{ ch.modlevel }}</span>
+        {% endif %}
+      </td>
+      <td class="text-right">
+        <a href="/admin/characters/{{ ch.id }}" class="btn btn-sm">View</a>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="9" class="muted text-center">No characters found</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

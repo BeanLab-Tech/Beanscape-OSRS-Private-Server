@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}}{{ account.login_username }} - BeanLab Admin{% endblock %}
+{% block content %}
+<div class="flex-between mb-2">
+  <h1 style="margin-bottom:0">{{ account.display_name or account.login_username }}</h1>
+  <div class="btn-group">
+    <a href="/admin/accounts" class="btn">Back to Accounts</a>
+  </div>
+</div>
+
+<div class="grid grid-2 mb-2">
+  <div class="card">
+    <h2>Account Info</h2>
+    <table>
+      <tr><td class="muted">ID</td><td>{{ account.id }}</td></tr>
+      <tr><td class="muted">Login Username</td><td class="mono">{{ account.login_username }}</td></tr>
+      <tr><td class="muted">Display Name</td><td>{{ account.display_name or '-' }}</td></tr>
+      <tr><td class="muted">Email</td><td>{{ account.email or '-' }}</td></tr>
+      <tr><td class="muted">Mod Level</td><td><span class="badge badge-{{ account.modlevel }}">{{ account.modlevel }}</span></td></tr>
+      <tr><td class="muted">Status</td><td>
+        {% if account.banned %}
+        <span class="badge badge-banned">BANNED</span>
+        {% if account.ban_reason %}<span class="small muted"> - {{ account.ban_reason }}</span>{% endif %}
+        {% else %}
+        <span class="badge badge-success">Active</span>
+        {% endif %}
+      </td></tr>
+      <tr><td class="muted">Discord ID</td><td class="mono small">{{ account.discord_id or '-' }}</td></tr>
+      <tr><td class="muted">Discord Username</td><td>{{ account.discord_username or '-' }}</td></tr>
+      <tr><td class="muted">Created</td><td>{{ account.created_at or 'N/A' }}</td></tr>
+      <tr><td class="muted">Updated</td><td>{{ account.updated_at or 'N/A' }}</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Actions</h2>
+
+    <h3>Mod Level</h3>
+    <form method="post" action="/admin/accounts/{{ account.id }}/modlevel" class="flex mb-2">
+      <select name="modlevel" class="w-full">
+        <option value="player" {{ 'selected' if account.modlevel == 'player' }}>Player</option>
+        <option value="moderator" {{ 'selected' if account.modlevel == 'moderator' }}>Moderator</option>
+        <option value="admin" {{ 'selected' if account.modlevel == 'admin' }}>Admin</option>
+        <option value="owner" {{ 'selected' if account.modlevel == 'owner' }}>Owner</option>
+      </select>
+      <button type="submit" class="btn btn-primary">Set</button>
+    </form>
+
+    <h3>Reset Password</h3>
+    <form method="post" action="/admin/accounts/{{ account.id }}/password" class="flex mb-2">
+      <input type="password" name="password" placeholder="New password" required>
+      <button type="submit" class="btn">Reset</button>
+    </form>
+
+    <h3>{% if account.banned %}Unban{% else %}Ban{% endif %}</h3>
+    {% if account.banned %}
+    <form method="post" action="/admin/accounts/{{ account.id }}/unban" class="flex mb-2">
+      <button type="submit" class="btn btn-success">Unban Account</button>
+    </form>
+    {% else %}
+    <form method="post" action="/admin/accounts/{{ account.id }}/ban" class="flex mb-2">
+      <input type="text" name="reason" placeholder="Ban reason (optional)">
+      <button type="submit" class="btn btn-danger">Ban</button>
+    </form>
+    {% endif %}
+
+    <h3>Delete Account</h3>
+    <form method="post" action="/admin/accounts/{{ account.id }}/delete"
+          onsubmit="return confirm('Delete {{ account.login_username }} and all characters? This is permanent.')">
+      <button type="submit" class="btn btn-danger">Delete Account</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Characters ({{ characters | length }})</h2>
+  {% for ch in characters %}
+  <div class="flex-between mb-1">
+    <div>
+      <b>{{ ch.name or 'Character #' ~ ch.id }}</b>
+      <span class="badge badge-{{ 'main' if ch.realm_id == 2 else 'dev' }} ml-1">{{ 'Main' if ch.realm_id == 2 else 'Dev' }}</span>
+      <span class="muted small ml-1">Level {{ ch.level }}</span>
+      <span class="muted small ml-1">Pos: {{ ch.x }},{{ ch.z }}</span>
+      {% if ch.last_login %}<span class="muted small ml-1">Last login: {{ ch.last_login[:16] }}</span>{% endif %}
+    </div>
+    <a href="/admin/characters/{{ ch.id }}" class="btn btn-sm">Full Details</a>
+  </div>
+
+  {% if ch.stats %}
+  <div class="stats-grid mt-1 mb-2">
+    {% for stat_name, level in ch.stats.items() %}
+    <div class="stat-item">
+      <div class="stat-name">{{ stat_name }}</div>
+      <div class="stat-value">{{ level }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if ch.inventories %}
+  <h3>Inventory</h3>
+  {% for inv_type, items in ch.inventories.items() %}
+  {% if items %}
+  <div class="small muted mb-1">Inventory type {{ inv_type }}:</div>
+  {% for item in items %}
+  <div class="item-card">
+    <img src="https://osrs-images.t-cs.co/items/{{ item.obj }}.png" alt="" onerror="this.style.display='none'">
+    <div>
+      <div class="item-name">{{ obj_name(item.obj) }}</div>
+      <div class="item-meta">obj {{ item.obj }} x{{ item.count }}</div>
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+  {% endfor %}
+  {% endif %}
+
+  <hr style="border-color: var(--border); margin: 1rem 0;">
+  {% endfor %}
+  {% if not characters %}
+  <p class="muted">No characters for this account.</p>
+  {% endif %}
+</div>
+{% endblock %}

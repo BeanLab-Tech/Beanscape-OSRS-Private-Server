@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}New Account - BeanLab Admin{% endblock %}
+{% block content %}
+<h1>New Account</h1>
+
+<div class="card">
+  <form method="post" action="/admin/accounts/new">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="username">Login Username</label>
+        <input type="text" id="username" name="username" required placeholder="e.g. wiseoldbean">
+      </div>
+      <div class="form-group">
+        <label for="display_name">Display Name</label>
+        <input type="text" id="display_name" name="display_name" placeholder="e.g. WiseOldBean">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required placeholder="Initial password">
+      </div>
+      <div class="form-group">
+        <label for="modlevel">Mod Level</label>
+        <select id="modlevel" name="modlevel">
+          <option value="player">Player</option>
+          <option value="moderator">Moderator</option>
+          <option value="admin">Admin</option>
+          <option value="owner">Owner</option>
+        </select>
+      </div>
+    </div>
+    <div class="btn-group">
+      <button type="submit" class="btn btn-primary">Create Account</button>
+      <a href="/admin/accounts" class="btn">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

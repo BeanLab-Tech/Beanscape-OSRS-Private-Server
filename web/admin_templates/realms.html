@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Realms - BeanLab Admin{% endblock %}
+{% block content %}
+<h1>Realms</h1>
+
+{% for realm in realms %}
+<div class="card">
+  <div class="flex-between mb-2">
+    <h2 style="margin-bottom:0">{{ realm.name }}
+      {% if realm.dev_mode %}
+      <span class="badge badge-dev">DEV</span>
+      {% else %}
+      <span class="badge badge-main">MAIN</span>
+      {% endif %}
+    </h2>
+    <span class="muted small">Realm ID: {{ realm.id }}</span>
+  </div>
+
+  <p class="small muted mb-2">{{ realm.description or 'No description' }}</p>
+
+  <form method="post" action="/admin/realms/{{ realm.id }}">
+    <div class="grid grid-3">
+      <div class="form-group">
+        <label>Dev Mode</label>
+        <select name="dev_mode">
+          <option value="0" {{ 'selected' if not realm.dev_mode }}>Off</option>
+          <option value="1" {{ 'selected' if realm.dev_mode }}>On</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Require Registration</label>
+        <select name="require_registration">
+          <option value="0" {{ 'selected' if not realm.require_registration }}>Off</option>
+          <option value="1" {{ 'selected' if realm.require_registration }}>On</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Ignore Passwords</label>
+        <select name="ignore_passwords">
+          <option value="0" {{ 'selected' if not realm.ignore_passwords }}>Off</option>
+          <option value="1" {{ 'selected' if realm.ignore_passwords }}>On</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Player XP Rate (hundreds, 100=1x)</label>
+        <input type="number" name="player_xp_rate_in_hundreds" value="{{ realm.player_xp_rate_in_hundreds }}" step="1" min="0">
+      </div>
+      <div class="form-group">
+        <label>Global XP Rate (hundreds, 100=1x)</label>
+        <input type="number" name="global_xp_rate_in_hundreds" value="{{ realm.global_xp_rate_in_hundreds }}" step="1" min="0">
+      </div>
+      <div class="form-group" style="display:flex; align-items:flex-end;">
+        <button type="submit" class="btn btn-primary">Save Realm</button>
+      </div>
+    </div>
+  </form>
+</div>
+{% endfor %}
+{% endblock %}

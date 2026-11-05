@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}{{ char.display_name or char.login_username }} - BeanLab Admin{% endblock %}
+{% block content %}
+<div class="flex-between mb-2">
+  <h1 style="margin-bottom:0">{{ char.display_name or char.login_username }}
+    <span class="badge badge-{{ 'main' if char.realm_id == 2 else 'dev' }}">{{ 'Main' if char.realm_id == 2 else 'Dev' }}</span>
+  </h1>
+  <div class="btn-group">
+    <a href="/admin/characters" class="btn">Back to Characters</a>
+    <a href="/admin/accounts/{{ char.account_id }}" class="btn">View Account</a>
+    <form method="post" action="/admin/characters/{{ char.id }}/mute" style="display:inline">
+      <button type="submit" class="btn">{% if char.muted_until %}Unmute{% else %}Mute 1h{% endif %}</button>
+    </form>
+  </div>
+</div>
+
+<div class="grid grid-2 mb-2">
+  <div class="card">
+    <h2>Character Info</h2>
+    <table>
+      <tr><td class="muted">Character ID</td><td>{{ char.id }}</td></tr>
+      <tr><td class="muted">Account</td><td><a href="/admin/accounts/{{ char.account_id }}">{{ char.login_username }}</a></td></tr>
+      <tr><td class="muted">Display Name</td><td>{{ char.display_name or char.login_username }}</td></tr>
+      <tr><td class="muted">Realm</td><td>
+        {% if char.realm_id == 2 %}
+        <span class="badge badge-main">Main</span>
+        {% else %}
+        <span class="badge badge-dev">Dev</span>
+        {% endif %}
+      </td></tr>
+      <tr><td class="muted">Level</td><td>{{ char.level }}</td></tr>
+      <tr><td class="muted">Position</td><td class="mono">{{ char.x }}, {{ char.z }}</td></tr>
+      <tr><td class="muted">Last Login</td><td>{{ char.last_login or 'Never' }}</td></tr>
+      <tr><td class="muted">Mod Level</td><td><span class="badge badge-{{ char.modlevel or 'player' }}">{{ char.modlevel or 'player' }}</span></td></tr>
+      <tr><td class="muted">Muted Until</td><td>{{ char.muted_until or 'Not muted' }}</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Master Stats</h2>
+    <p class="small muted mb-1">Edit visible levels and save. Changes take effect on next login.</p>
+    <form method="post" action="/admin/characters/{{ char.id }}/stats">
+      <div class="stats-grid">
+        {% for stat_name, data in char.stats.items() %}
+        <div class="stat-item">
+          <div class="stat-name">{{ stat_name }}</div>
+          <div class="stat-value">{{ data.vis }}</div>
+          <div class="stat-xp">{{ data.xp if data.xp else 0 }} XP</div>
+          <input type="number" name="stat_{{ loop.index0 }}" value="{{ data.vis }}" min="1" max="99" style="margin-top:.3rem; padding:.3rem .5rem; font-size:.85rem;">
+        </div>
+        {% endfor %}
+      </div>
+      <div class="mt-2">
+        <button type="submit" class="btn btn-primary">Save Stats</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Inventories</h2>
+  {% if char.inventories %}
+  {% for inv_type, items in char.inventories.items() %}
+  {% if items %}
+  <h3>Inventory Type {{ inv_type }}</h3>
+  {% for item in items %}
+  <div class="item-card">
+    <img src="https://osrs-images.t-cs.co/items/{{ item.obj }}.png" alt="" onerror="this.style.display='none'">
+    <div>
+      <div class="item-name">{{ item.name }}</div>
+      <div class="item-meta">obj {{ item.obj }} x{{ item.count }}</div>
+    </div>
+  </div>
+  {% endfor %}
+  <hr style="border-color: var(--border); margin: 1rem 0;">
+  {% endif %}
+  {% endfor %}
+  {% else %}
+  <p class="muted">No inventories found for this character.</p>
+  {% endif %}
+</div>
+{% endblock %}

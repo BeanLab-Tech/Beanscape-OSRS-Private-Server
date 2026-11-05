@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Accounts - BeanLab Admin{% endblock %}
+{% block content %}
+<div class="flex-between mb-2">
+  <h1 style="margin-bottom:0">Accounts</h1>
+  <a href="/admin/accounts/new" class="btn btn-primary">New Account</a>
+</div>
+
+<div class="card">
+  <table>
+    <tr>
+      <th>ID</th>
+      <th>Username</th>
+      <th>Display Name</th>
+      <th>Mod Level</th>
+      <th>Status</th>
+      <th>Discord</th>
+      <th>Created</th>
+      <th></th>
+    </tr>
+    {% for acct in accounts %}
+    <tr>
+      <td class="muted">{{ acct.id }}</td>
+      <td><a href="/admin/accounts/{{ acct.id }}"><b>{{ acct.login_username }}</b></a></td>
+      <td>{{ acct.display_name or '-' }}</td>
+      <td><span class="badge badge-{{ acct.modlevel }}">{{ acct.modlevel }}</span></td>
+      <td>
+        {% if acct.banned %}
+        <span class="badge badge-banned">BANNED</span>
+        {% else %}
+        <span class="badge badge-success">Active</span>
+        {% endif %}
+      </td>
+      <td class="small muted">{{ acct.discord_username or (acct.discord_id[:8] ~ '...' if acct.discord_id else '-') }}</td>
+      <td class="small muted">{{ (acct.created_at or '')[:10] if acct.created_at else 'N/A' }}</td>
+      <td class="text-right">
+        <a href="/admin/accounts/{{ acct.id }}" class="btn btn-sm">View</a>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="8" class="muted text-center">No accounts found</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}
