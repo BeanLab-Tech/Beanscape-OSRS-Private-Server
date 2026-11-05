@@ -638,9 +638,9 @@ async def spawn_item(request: Request) -> RedirectResponse:
                 (char_id, inv_type),
             ).fetchone()
         inv_id = row["id"]
-        # Check if item already exists in inventory
+        # Check if item already exists in inventory (composite PK is inventories_id+slot; no id column)
         existing = conn.execute(
-            "SELECT id, count FROM inventory_objs WHERE inventories_id=? AND obj=?",
+            "SELECT 1 FROM inventory_objs WHERE inventories_id=? AND obj=? LIMIT 1",
             (inv_id, item_id),
         ).fetchone()
         if existing:
