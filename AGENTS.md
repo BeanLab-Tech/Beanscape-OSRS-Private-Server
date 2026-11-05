@@ -111,6 +111,38 @@ JVM: `de.mkammerer:argon2-jvm:2.12` (upstream `api/pw-hash`). Python: `argon2-cf
 - The VM checkout is different: its `origin` is upstream rsmod (never push there) and `gitea` is
   the BeanLab Gitea mirror.
 
+### VM ↔ overlay reconciliation (two lineages, by design)
+
+The VM checkout (`/opt/osrs/server/rsmod`) is a **full upstream RsMod checkout** whose git history
+is rooted in upstream (`fa13b3f6` → BeanLab commits). This overlay's history is rooted in its own
+curated commits. The two `ferox-buildout` branches are **unrelated lineages** — do NOT push the
+VM's git history directly to the overlay (it would be non-fast-forward and would flood the
+overlay with `engine/`, `server/`, `build-logic/`, `.data/`, etc.).
+
+Reconciliation = **content projection**: copy the VM's `api/` + `content/` (the overlay-relevant
+subset) into a clone of this overlay, commit, push. Verify byte-consistency with
+`diff -rq <vm>/api <overlay>/api` (only "Only in <vm>" lines are expected — the overlay carries a
+subset). The overlay additionally holds `docs/`, `web/`, `scripts/`, `AGENTS.md`, `CLAUDE.md`,
+`.github/`, which the VM does not.
+
+**Working push path from the VM** (the Gitea LXC bare repo is root-owned, and the VM's git 2.53
+sends `Authorization: Bearer` over HTTP where Gitea wants `Basic` — the LAN HTTP push is broken).
+Use the sudo-SSH form instead:
+
+```bash
+# key: /root/.ssh/id_ed25519_gitea  (pubkey installed on the Gitea LXC authorized_keys)
+GIT_SSH="ssh -i /root/.ssh/id_ed25519_gitea -o StrictHostKeyChecking=no"
+REPO=/var/lib/gitea/data/gitea-repositories/cfiaschetti/osrs-server.git
+# read overlay state:
+$GIT_SSH cfiaschetti@192.168.1.117 "sudo git --git-dir=$REPO for-each-ref"
+# push a local ref (e.g. after syncing overlay content into a clone on the VM):
+$GIT_SSH cfiaschetti@192.168.1.117 "sudo git --git-dir=$REPO push origin <branch>"
+```
+
+The agent's own box (Sheldon profile) reaches Gitea over the tailnet
+(`https://gitea.tail5475a4.ts.net`, `GITEA_TOKEN` in `~/.hermes/profiles/sheldon/.env`) — that push
+path works with plain `git push`. The VM cannot reach the tailnet, hence sudo-SSH.
+
 ---
 
 ## Testing Checklist
