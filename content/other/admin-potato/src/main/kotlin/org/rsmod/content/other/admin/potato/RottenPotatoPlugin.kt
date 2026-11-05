@@ -1,5 +1,6 @@
 package org.rsmod.content.other.admin.potato
 
+import com.github.michaelbull.logging.InlineLogger
 import jakarta.inject.Inject
 import org.rsmod.annotations.InternalApi
 import org.rsmod.api.config.refs.modlevels
@@ -34,6 +35,8 @@ constructor(
     private val modLevelTypes: ModLevelTypeList,
 ) : PluginScript() {
 
+    private val logger = InlineLogger()
+
     override fun org.rsmod.plugin.scripts.ScriptContext.startup() {
 
         // ---- Use the potato: open admin menu ----
@@ -48,6 +51,7 @@ constructor(
             // per id). Granting on use is equivalent for our purpose — the potato is
             // non-tradeable and only ever held by the admin who uses it.
             val pa = this
+            logger.info { "[potato] onOpHeld1 fired for player ${pa.player.displayName} modLevel=${pa.player.modLevel}" }
             if (pa.player.modLevel.hasAccessTo(modlevels.moderator) && !pa.player.inv.contains(objs.rotten_potato)) {
                 pa.player.invAdd(pa.player.inv, objs.rotten_potato, 1, strict = false)
             }
@@ -64,6 +68,7 @@ constructor(
                 "Slow reboot",
                 "Done",
             )
+            logger.info { "[potato] player ${pa.player.displayName} chose $choice" }
             when (choice) {
                 0 -> pa.setAllStats()
                 1 -> pa.wipeInventory()
@@ -83,6 +88,7 @@ constructor(
     @OptIn(InternalApi::class)
     private suspend fun ProtectedAccess.setAllStats() {
         val raw = stringDialog("Set all stats to what level? (1-99)")
+        logger.info { "[potato] setAllStats dialog: raw=$raw" }
         val level = raw.trim().toIntOrNull()
         if (level == null || level !in 1..99) {
             mes("Not a valid level.")
@@ -108,6 +114,7 @@ constructor(
         }
         player.appearance.combatLevel = PlayerSkillXP.calculateCombatLevel(player)
         org.rsmod.api.player.ui.PlayerInterfaceUpdates.updateCombatLevel(player)
+        logger.info { "[potato] setAllStats done for ${player.displayName} level=$level" }
         mes("All stats set to ${level}. Finished cheating.")
     }
 
@@ -124,7 +131,9 @@ constructor(
             return
         }
         val count = stringDialog("How many?").trim().toIntOrNull() ?: 1
+        logger.info { "[potato] spawnItem requested id=$id count=$count" }
         val res = player.invAdd(player.inv, id, count, strict = false)
+        logger.info { "[potato] spawnItem id=$id count=$count success=${res.success}" }
         if (res.success) mes("Spawned ${count} x ${id}.") else mes("Spawn failed (no room?).")
     }
 
