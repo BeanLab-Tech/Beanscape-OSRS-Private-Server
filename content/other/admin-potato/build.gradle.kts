@@ -19,4 +19,6 @@ dependencies {
     implementation(projects.api.playerOutput)
     //  - SafeServiceExit (utils.system)
     implementation(projects.api.utils.utilsSystem)
+    //  - onCommand builder for ::teleports / ::tp
+    implementation(projects.api.cheat)
 }

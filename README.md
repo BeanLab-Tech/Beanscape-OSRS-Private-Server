@@ -285,6 +285,20 @@ The bot (`osrs-discord.service`) listens in its dedicated channel for:
 
 Full list: `content/other/commands/.../AdminCommands.kt` upstream.
 
+### BeanLab admin tools (`content/other/admin-potato`)
+
+| Command / item | Who | Description |
+|---------|-----|-------------|
+| Rotten potato (obj 5733) → Use | moderator+ | Menu: set all stats, wipe inventory, spawn item (search by name), teleports, my position, set modlevel, kick, reboot |
+| `::teleports` / `::tp` | moderator+ | Teleport menu: cities, important areas, bosses & raids, NPCs, minigames, skilling, search by name, previous, typed coords. Destinations are data in `TeleportCatalog.kt` (x, z, level) |
+| `::questsdone [name]` | admin | Marks every quest/miniquest complete for you or an online player and sets full QP. The quest→var map in `QuestProgressVars.kt` is decoded from cache clientscript 4024 (`quest_progress_get`); the completion value is the `quest` dbtable's `endstate` |
+
+### Membership
+
+Every account is members: `CharacterAccountApplier` forces `player.members = true` at login (accounts
+are created by the server, web, admin panel and Discord bot, all with `members DEFAULT 0`), and V11
+sets the column to 1 for existing accounts. The world list already flags world 1 as members.
+
 ### Grand Exchange
 
 **Schema:** `ge_offers` + `ge_history` (Flyway V7, V8)

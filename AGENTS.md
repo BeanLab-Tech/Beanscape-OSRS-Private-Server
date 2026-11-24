@@ -15,16 +15,26 @@ api/db/src/main/resources/db/migration/
   V7__grand_exchange.sql             GE tables
   V8__grand_exchange_revisions.sql   GE revision column + trade dedupe keys
   V9__beanlab_realm_hardening.sql    real auth + Discord-only registration on the `dev` realm
+  V10__discord_oauth.sql             Discord OAuth columns
+  V11__beanlab_members_for_all.sql   every account members
+api/account/.../CharacterAccountApplier.kt   forces player.members = true at login
+api/config/.../BaseObjs.kt           adds objs.rotten_potato
+content/other/admin-potato/          rotten potato menu, ::teleports/::tp (TeleportCatalog/Menu),
+                                     ::questsdone (QuestCommands + generated QuestProgressVars)
 content/other/grandexchange/         GE engine (GeBook), ::ge commands (GeCommands), tests
 content/other/commands/.../NameChangeCommands.kt   ::name
+web/                                 Discord registration + admin panel (FastAPI)
+discordbot/bot.py                    Discord bot (token read from /opt/osrs/config on the VM)
 scripts/build-overlay.sh             builds/tests the overlay on pinned upstream
 docs/                                session report, audit
 ```
 
-On VM 123 the overlay is copied into an upstream checkout at `/opt/osrs/server/rsmod`.
+On VM 123 the overlay is copied into an upstream checkout at `/opt/osrs/server/rsmod`. Build there
+with `./gradlew :server:app:installDist` **with `osrs-server` stopped**: replacing jars under the
+running JVM breaks its shutdown save hook (NoClassDefFoundError) and loses online players' progress.
 
-Not in this repo: the Discord bot (`/opt/osrs/discordbot/` on the VM), RSProx client config
-(`~/.rsprox/` on Windows), runtime data (`.data/`).
+Not in this repo: secrets (`/opt/osrs/web/config.json`, `env`, `admin_config.json`, the Discord
+token file), RSProx client config (`~/.rsprox/` on Windows), runtime data (`.data/`).
 
 ---
 

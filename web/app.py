@@ -147,21 +147,39 @@ async def _startup() -> None:
 
 # ---------------------------------------------------------------- pages
 
-LANDING = """<!doctype html><html><head><meta charset="utf-8">
+LANDING = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BeanLab OSRS</title>
-<style>body{font-family:system-ui,sans-serif;max-width:640px;margin:4rem auto;padding:0 1rem;line-height:1.5}
-button{padding:.7rem 1.4rem;font-size:1rem;border:0;border-radius:8px;background:#4f46e5;color:#fff;cursor:pointer}
-a.muted{color:#666;font-size:.85rem}</style></head><body>
-<h1>BeanLab OSRS</h1>
-<p>Register with Discord to create your account. After registering,
-connect with <b>RSProx</b> (target: <b>BeanLab OSRS</b>) and log in with
-the username shown below.</p>
-<a href="/oauth/discord/start"><button>Register with Discord</button></a>
-<p class="muted">Already registered? Use your Discord global name (lowercased,
-spaces and underscores allowed, 2–12 chars) with a random password —
-or set a known one in <code>/oauth/discord/callback</code> by re-registering
-with the same name.</p>
-</body></html>"""
+<style>
+:root { --bg:#1a1a2e; --surface:#16213e; --accent:#e94560; --text:#eaeaea; --muted:#8888aa; --border:#2a2a4a; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:"Segoe UI",system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; display:flex; align-items:center; justify-content:center; }
+.card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:2.5rem; max-width:480px; width:100%; margin:2rem 1rem; text-align:center; }
+h1 { font-size:1.8rem; margin-bottom:.5rem; letter-spacing:-.02em; }
+h1 span { color:var(--accent); }
+.sub { color:var(--muted); font-size:.9rem; margin-bottom:1.5rem; line-height:1.5; }
+.btn { display:inline-block; padding:.8rem 2rem; border:0; border-radius:8px; background:var(--accent); color:#fff; font-size:1rem; font-weight:600; cursor:pointer; text-decoration:none; transition:opacity .15s; }
+.btn:hover { opacity:.85; }
+.div { border:none; border-top:1px solid var(--border); margin:1.5rem 0; }
+.hint { color:var(--muted); font-size:.8rem; line-height:1.5; text-align:left; }
+.hint code { background:var(--bg); padding:1px 5px; border-radius:4px; font-size:.8rem; }
+.badge { display:inline-block; padding:.2rem .6rem; border-radius:4px; font-size:.75rem; font-weight:600; background:rgba(233,69,96,.15); color:var(--accent); margin-bottom:1rem; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="badge">Private Server</div>
+  <h1><span>BeanLab</span> OSRS</h1>
+  <p class="sub">Register with Discord to create your account. After registering, connect with <b>RSProx</b> (target: <b>BeanLab OSRS</b>) and log in with the username shown below.</p>
+  <a href="/oauth/discord/start" class="btn">Register with Discord</a>
+  <hr class="div">
+  <div class="hint"><b>Already registered?</b><br>Use your Discord global name (lowercased, 2-12 chars) with the password shown at registration. Or reset via the <code>/admin</code> panel.</div>
+</div>
+</body>
+</html>"""
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -211,7 +229,7 @@ async def oauth_start() -> RedirectResponse:
 
 
 @app.get("/oauth/discord/callback")
-async def oauth_callback(request: Request, code: str, state: str) -> HTMLResponse:
+async def oauth_callback(request: Request, code: str, state: str = None) -> HTMLResponse:
     async with httpx.AsyncClient(timeout=15) as client:
         tok = await client.post(
             "https://discord.com/api/oauth2/token",

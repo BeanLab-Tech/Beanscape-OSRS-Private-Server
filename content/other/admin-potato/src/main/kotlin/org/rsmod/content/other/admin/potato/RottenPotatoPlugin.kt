@@ -8,8 +8,8 @@ import org.rsmod.api.config.refs.objs
 import org.rsmod.api.invtx.invAdd
 import org.rsmod.api.invtx.invClear
 import org.rsmod.api.player.output.MiscOutput
-import org.rsmod.api.player.stat.PlayerSkillXP
 import org.rsmod.api.player.protect.ProtectedAccess
+import org.rsmod.api.player.stat.PlayerSkillXP
 import org.rsmod.api.script.onOpHeld1
 import org.rsmod.api.utils.system.SafeServiceExit
 import org.rsmod.game.stat.PlayerSkillXPTable
@@ -21,19 +21,16 @@ import org.rsmod.plugin.scripts.PluginScript
 /**
  * BeanLab admin "rotten potato" (obj 5733) — mirrors the Jagex moderator potato.
  *
- * Granted to moderator+ on login. Right-click > Use opens a protected menu of
- * admin actions (set all stats, wipe inventory, teleport, spawn item, set
- * modlevel, kick, reboot). Non-tradeable + non-stackable so it can't leak or
- * be duped.
+ * Granted to moderator+ on login. Right-click > Use opens a protected menu of admin actions (set
+ * all stats, wipe inventory, teleport, spawn item, set modlevel, kick, reboot). Non-tradeable +
+ * non-stackable so it can't leak or be duped.
  *
  * Rollback: delete content/other/admin-potato and rebuild :server:install.
  */
 public class RottenPotatoPlugin
 @Inject
-constructor(
-    private val statTypes: StatTypeList,
-    private val modLevelTypes: ModLevelTypeList,
-) : PluginScript() {
+constructor(private val statTypes: StatTypeList, private val modLevelTypes: ModLevelTypeList) :
+    PluginScript() {
 
     private val logger = InlineLogger()
 
@@ -51,29 +48,39 @@ constructor(
             // per id). Granting on use is equivalent for our purpose — the potato is
             // non-tradeable and only ever held by the admin who uses it.
             val pa = this
-            logger.info { "[potato] onOpHeld1 fired for player ${pa.player.displayName} modLevel=${pa.player.modLevel}" }
-            if (pa.player.modLevel.hasAccessTo(modlevels.moderator) && !pa.player.inv.contains(objs.rotten_potato)) {
+            logger.info {
+                "[potato] onOpHeld1 fired for player ${pa.player.displayName} modLevel=${pa.player.modLevel}"
+            }
+            if (
+                pa.player.modLevel.hasAccessTo(modlevels.moderator) &&
+                    !pa.player.inv.contains(objs.rotten_potato)
+            ) {
                 pa.player.invAdd(pa.player.inv, objs.rotten_potato, 1, strict = false)
             }
-            val choice = pa.menu(
-                "BeanLab Admin Potato",
-                "Set all stats",
-                "Wipe inventory",
-                "Spawn item",
-                "Teleport to coords",
-                "My position",
-                "Set my modlevel",
-                "Kick me",
-                "Reboot world",
-                "Slow reboot",
-                "Done",
-            )
+            val choice =
+                pa.menu(
+                    "BeanLab Admin Potato",
+                    "Set all stats",
+                    "Wipe inventory",
+                    "Spawn item",
+                    "Teleports",
+                    "My position",
+                    "Set my modlevel",
+                    "Kick me",
+                    "Reboot world",
+                    "Slow reboot",
+                    "Done",
+                )
             logger.info { "[potato] player ${pa.player.displayName} chose $choice" }
+            // Close the menu modal before any follow-up prompt. Otherwise stringDialog
+            // captures the menu as its expected modal, and when that modal closes RsMod
+            // aborts the input (ProtectedAccessLostException, swallowed silently).
+            pa.ifClose()
             when (choice) {
                 0 -> pa.setAllStats()
                 1 -> pa.wipeInventory()
                 2 -> pa.spawnItem()
-                3 -> pa.teleportToCoords()
+                3 -> pa.openTeleportMenu()
                 4 -> pa.myPosition()
                 5 -> pa.setMyModlevel()
                 6 -> pa.kickMe()
@@ -125,16 +132,20 @@ constructor(
     }
 
     private suspend fun ProtectedAccess.spawnItem() {
-        val id = stringDialog("Item id to spawn:").trim().toIntOrNull()
-        if (id == null) {
-            mes("Not an item id.")
+        // Native OSRS item search (same box as the GE): type part of a name, pick from the list.
+        // stockMarketRestriction = false so untradeables are searchable too.
+        val obj = objDialog("Spawn which item?", stockMarketRestriction = false)
+        val count = countDialog("How many ${obj.name}?")
+        if (count <= 0) {
+            mes("Nothing spawned.")
             return
         }
-        val count = stringDialog("How many?").trim().toIntOrNull() ?: 1
-        logger.info { "[potato] spawnItem requested id=$id count=$count" }
-        val res = player.invAdd(player.inv, id, count, strict = false)
-        logger.info { "[potato] spawnItem id=$id count=$count success=${res.success}" }
-        if (res.success) mes("Spawned ${count} x ${id}.") else mes("Spawn failed (no room?).")
+        logger.info { "[potato] spawnItem requested ${obj.name} (id=${obj.id}) count=$count" }
+        val res = player.invAdd(player.inv, obj.id, count, strict = false)
+        logger.info {
+            "[potato] spawnItem ${obj.name} id=${obj.id} count=$count success=${res.success}"
+        }
+        if (res.success) mes("Spawned $count x ${obj.name}.") else mes("Spawn failed (no room?).")
     }
 
     private suspend fun ProtectedAccess.teleportToCoords() {
