@@ -76,7 +76,8 @@ log "deploying ${current:0:7} -> ${target:0:7}"
 
 # 1. Build next to the running server. Sources change, the installed jars don't, so the running
 #    game is unaffected; if compilation fails we stop here and the game keeps running.
-chown -R osrs:osrs "$RSMOD"   # -R does not follow symlinks; one-time for older root-built trees
+# $RSMOD must already be owned by osrs (install.sh does that once). No recursive chown as root here:
+# osrs could plant links in its own tree and have root re-own files outside it.
 as_osrs rsync -a "$SRC/api" "$SRC/content" "$RSMOD/"
 if ! (cd "$RSMOD" && as_osrs ./gradlew compileKotlin -q > "$BASE/build.log" 2>&1); then
     grep -E '^e:|What went wrong' -A3 "$BASE/build.log" | head -20 || true
