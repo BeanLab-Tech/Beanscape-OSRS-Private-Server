@@ -216,12 +216,24 @@ the game).
 `https://runescape-server.tail5475a4.ts.net/admin` accepts:
 
 - the panel's own login from `/opt/osrs/web/admin_config.json`, or
-- **any game account with modlevel `admin` or `owner`** (not banned), using its game username and
-  password, checked against the account's Argon2i hash.
+- a **game account that is both listed in `admin_config.json` `"panel_users"` and an unbanned
+  `owner`**, using its game username and password (checked against its Argon2i hash).
 
-Players and moderators can't sign in to the panel, and a game account and the panel are separate
-logins: signing in to one doesn't sign you in to the other. Logins and failures are logged
-(`journalctl -u osrs-admin | grep "admin panel login"`).
+To give someone panel access: make their game account `owner`, then add their login name to
+`panel_users` on the VM (`sudo nano /opt/osrs/web/admin_config.json`, e.g.
+`"panel_users": ["umpix"]`) and `systemctl restart osrs-admin`. Currently: `umpix`.
+
+Safeguards:
+- **Owner only.** The panel creates accounts and sets modlevels, so admins can't sign in (they
+  could otherwise create owners). A game modlevel alone never grants access; the allowlist only
+  lives on the VM.
+- **Live re-check.** Game-account sessions are re-checked on every page; demoting, banning,
+  deleting or unlisting the account ends the session immediately. Logout deletes the session.
+- **Lockout.** 5 failures within 15 minutes per IP or per username blocks further attempts
+  ("Too many attempts"). Failures all take the same time (a dummy Argon2 check runs for unknown or
+  ineligible users), and at most 2 Argon2 checks run at once.
+- Logins, failures, lockouts and revocations are logged:
+  `journalctl -u osrs-admin | grep "admin panel"`.
 
 ### Web (Discord OAuth) — `osrs-web`
 
@@ -499,7 +511,7 @@ cd /opt/osrs/server/rsmod && git bundle create /opt/osrs/backups/osrs-server.bun
 ## Changelog
 
 ### 2026-11-24
-- **Admin panel:** admin/owner game accounts can sign in with their game password (before, only
+- **Admin panel:** allowlisted owner game accounts (`panel_users`) can sign in with their game password (before, only
   the single `admin_config.json` login worked, so staff accounts created in the panel got
   "Invalid credentials").
 - **Potato spawn:** the item search lists each item's bank placeholder too (named "null"

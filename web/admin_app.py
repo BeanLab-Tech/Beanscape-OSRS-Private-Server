@@ -93,6 +93,9 @@ class AdminConfig:
         self.admin_password = raw["admin_password"]
         self.db_path = raw["db_path"]
         self.session_secret = raw.get("session_secret", secrets.token_hex(32))
+        # Game accounts allowed to sign in to the panel (must also be unbanned owners). Editable only
+        # on the VM, so a game modlevel alone never grants panel access.
+        self.panel_users = {str(u).strip().lower() for u in raw.get("panel_users", [])}
 
     @classmethod
     def load(cls) -> "AdminConfig":
@@ -126,9 +129,9 @@ def db_connect() -> sqlite3.Connection:
 SESSIONS: dict[str, dict] = {}
 
 
-def make_session(username: str) -> str:
+def make_session(username: str, game_account: bool = False) -> str:
     token = secrets.token_hex(32)
-    SESSIONS[token] = {"user": username, "created": time.time()}
+    SESSIONS[token] = {"user": username, "created": time.time(), "game": game_account}
     return token
 
 
@@ -147,7 +150,14 @@ def require_admin(request: Request) -> str:
     token = request.cookies.get("admin_session")
     if not verify_session(token):
         raise HTTPException(status_code=307, headers={"Location": "/admin/login"})
-    return SESSIONS[token]["user"]
+    session = SESSIONS[token]
+    # Game-account sessions are re-checked on every request, so a demotion, ban or deletion takes
+    # effect immediately instead of when the 12h session expires.
+    if session.get("game") and not game_account_is_panel_staff(session["user"]):
+        SESSIONS.pop(token, None)
+        log.warning("admin panel session revoked for %s (no longer an unbanned owner)", session["user"])
+        raise HTTPException(status_code=307, headers={"Location": "/admin/login"})
+    return session["user"]
 
 
 def obj_name(obj_id: int) -> str:
@@ -210,32 +220,87 @@ async def login_page(request: Request, error: str = "") -> HTMLResponse:
     return render("login.html", request, {"error": error, "user": None})
 
 
-# Game accounts with one of these modlevels may also sign in to the panel (password checked against
-# the same Argon2i hash the game server uses). The admin_config.json login keeps working.
-PANEL_MODLEVELS = ("admin", "owner")
+# Game accounts with this modlevel may also sign in to the panel (password checked against the same
+# Argon2i hash the game server uses). Owner only: the panel can create accounts and set modlevels, so
+# letting admins in would let them create owners. The account must also be listed in
+# admin_config.json "panel_users". The admin_config.json login keeps working.
+PANEL_MODLEVELS = ("owner",)
+
+_PANEL_HASHER = None
+_DUMMY_HASH = None
+# Lockout: this many failures per IP or per username within the window blocks further attempts.
+LOGIN_MAX_FAILURES = 5
+LOGIN_WINDOW_SECONDS = 900
+_LOGIN_FAILURES: dict[str, list[float]] = {}
+# Each Argon2 verify uses 64 MB; cap how many run at once so login spam can't exhaust memory.
+_ARGON2_SLOTS = None
 
 
-def verify_game_staff(username: str, password: str) -> bool:
-    """True if `username` is a non-banned admin/owner game account and `password` matches its hash."""
-    from argon2 import PasswordHasher, Type
-    from argon2.exceptions import Argon2Error
+def _argon2_slots():
+    global _ARGON2_SLOTS
+    if _ARGON2_SLOTS is None:
+        import asyncio
 
+        _ARGON2_SLOTS = asyncio.Semaphore(2)
+    return _ARGON2_SLOTS
+
+
+def _hasher():
+    global _PANEL_HASHER, _DUMMY_HASH
+    if _PANEL_HASHER is None:
+        from argon2 import PasswordHasher, Type
+
+        _PANEL_HASHER = PasswordHasher(time_cost=20, memory_cost=65536, parallelism=1, type=Type.I)
+        _DUMMY_HASH = _PANEL_HASHER.hash(secrets.token_hex(16))
+    return _PANEL_HASHER
+
+
+def _staff_row(username: str):
     conn = db_connect()
     try:
-        row = conn.execute(
+        return conn.execute(
             "SELECT password_hash, modlevel, banned FROM accounts WHERE login_username = ?",
             (username.strip().lower(),),
         ).fetchone()
     finally:
         conn.close()
-    if row is None or row["modlevel"] not in PANEL_MODLEVELS or row["banned"]:
-        return False
+
+
+def _eligible(username: str, row) -> bool:
+    return (
+        username.strip().lower() in CFG.panel_users
+        and row is not None
+        and row["modlevel"] in PANEL_MODLEVELS
+        and not row["banned"]
+    )
+
+
+def game_account_is_panel_staff(username: str) -> bool:
+    return _eligible(username, _staff_row(username))
+
+
+def verify_game_staff(username: str, password: str) -> bool:
+    """True if `username` is a non-banned owner game account and `password` matches its hash.
+
+    Always runs one Argon2 verify, against a dummy hash when the account is missing or ineligible,
+    so failures take the same time and don't reveal which usernames exist or are staff.
+    """
+    from argon2.exceptions import Argon2Error
+
+    hasher = _hasher()
+    row = _staff_row(username)
+    eligible = _eligible(username, row)
     try:
-        return PasswordHasher(time_cost=20, memory_cost=65536, parallelism=1, type=Type.I).verify(
-            row["password_hash"], password
-        )
+        ok = hasher.verify(row["password_hash"] if eligible else _DUMMY_HASH, password)
     except Argon2Error:
-        return False
+        ok = False
+    return ok and eligible
+
+
+def _recent_failures(key: str, now: float) -> list[float]:
+    times = [t for t in _LOGIN_FAILURES.get(key, []) if now - t < LOGIN_WINDOW_SECONDS]
+    _LOGIN_FAILURES[key] = times
+    return times
 
 
 @app.post("/admin/login")
@@ -246,24 +311,37 @@ async def login_submit(request: Request) -> RedirectResponse:
     username = str(form.get("username", ""))
     password = str(form.get("password", ""))
     source = request.client.host if request.client else "?"
+    keys = (f"ip:{source}", f"user:{username.strip().lower()}")
+    now = time.time()
+    if any(len(_recent_failures(k, now)) >= LOGIN_MAX_FAILURES for k in keys):
+        log.warning("admin panel login locked out for %r from %s", username, source)
+        return RedirectResponse("/admin/login?error=Too+many+attempts,+try+again+later", status_code=302)
+
+    game_account = False
     ok = hmac.compare_digest(username, CFG.admin_username) and hmac.compare_digest(password, CFG.admin_password)
     if not ok and username and password:
         # Argon2 with t=20 takes ~1s: keep it off the event loop.
-        ok = await run_in_threadpool(verify_game_staff, username, password)
+        async with _argon2_slots():
+            ok = await run_in_threadpool(verify_game_staff, username, password)
         if ok:
-            username = username.strip().lower()
+            username, game_account = username.strip().lower(), True
     if ok:
+        for k in keys:
+            _LOGIN_FAILURES.pop(k, None)
         log.info("admin panel login: %s from %s", username, source)
-        token = make_session(username)
+        token = make_session(username, game_account)
         resp = RedirectResponse("/admin/", status_code=302)
         resp.set_cookie("admin_session", token, httponly=True, samesite="strict", max_age=43200)
         return resp
+    for k in keys:
+        _LOGIN_FAILURES.setdefault(k, []).append(now)
     log.warning("admin panel login failed for %r from %s", username, source)
     return RedirectResponse("/admin/login?error=Invalid+credentials", status_code=302)
 
 
 @app.get("/admin/logout")
-async def logout() -> RedirectResponse:
+async def logout(request: Request) -> RedirectResponse:
+    SESSIONS.pop(request.cookies.get("admin_session") or "", None)
     resp = RedirectResponse("/admin/login", status_code=302)
     resp.delete_cookie("admin_session")
     return resp
