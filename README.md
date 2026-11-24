@@ -207,7 +207,21 @@ Useful for packet inspection. RSProx launches RuneLite 1.11.19 and patches it on
 
 ## Registration
 
-Registration is required (`require_registration=1`, V9). Two paths, both tailnet-only:
+Registration is required (`require_registration=1`, V9). Two self-service paths, both tailnet-only,
+plus admins can create accounts in the admin panel (`/admin` → Accounts → New; same Argon2i hash as
+the game).
+
+### Admin panel sign-in
+
+`https://runescape-server.tail5475a4.ts.net/admin` accepts:
+
+- the panel's own login from `/opt/osrs/web/admin_config.json`, or
+- **any game account with modlevel `admin` or `owner`** (not banned), using its game username and
+  password, checked against the account's Argon2i hash.
+
+Players and moderators can't sign in to the panel, and a game account and the panel are separate
+logins: signing in to one doesn't sign you in to the other. Logins and failures are logged
+(`journalctl -u osrs-admin | grep "admin panel login"`).
 
 ### Web (Discord OAuth) — `osrs-web`
 
@@ -485,6 +499,11 @@ cd /opt/osrs/server/rsmod && git bundle create /opt/osrs/backups/osrs-server.bun
 ## Changelog
 
 ### 2026-11-24
+- **Admin panel:** admin/owner game accounts can sign in with their game password (before, only
+  the single `admin_config.json` login worked, so staff accounts created in the panel got
+  "Invalid credentials").
+- **Potato spawn:** the item search lists each item's bank placeholder too (named "null"
+  server-side, shown with the real name in the client); picking it now spawns the real item.
 - **Rotten potato:** fixed "Set all stats" and "Spawn item" (the menu modal stayed open, so RsMod
   silently aborted the follow-up text prompt); spawn by item **name** via the native item search;
   menu gated by modlevel (privilege-escalation fix: moderators could set themselves owner).

@@ -210,16 +210,55 @@ async def login_page(request: Request, error: str = "") -> HTMLResponse:
     return render("login.html", request, {"error": error, "user": None})
 
 
+# Game accounts with one of these modlevels may also sign in to the panel (password checked against
+# the same Argon2i hash the game server uses). The admin_config.json login keeps working.
+PANEL_MODLEVELS = ("admin", "owner")
+
+
+def verify_game_staff(username: str, password: str) -> bool:
+    """True if `username` is a non-banned admin/owner game account and `password` matches its hash."""
+    from argon2 import PasswordHasher, Type
+    from argon2.exceptions import Argon2Error
+
+    conn = db_connect()
+    try:
+        row = conn.execute(
+            "SELECT password_hash, modlevel, banned FROM accounts WHERE login_username = ?",
+            (username.strip().lower(),),
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None or row["modlevel"] not in PANEL_MODLEVELS or row["banned"]:
+        return False
+    try:
+        return PasswordHasher(time_cost=20, memory_cost=65536, parallelism=1, type=Type.I).verify(
+            row["password_hash"], password
+        )
+    except Argon2Error:
+        return False
+
+
 @app.post("/admin/login")
 async def login_submit(request: Request) -> RedirectResponse:
+    from starlette.concurrency import run_in_threadpool
+
     form = await request.form()
-    username = form.get("username", "")
-    password = form.get("password", "")
-    if hmac.compare_digest(username, CFG.admin_username) and hmac.compare_digest(password, CFG.admin_password):
+    username = str(form.get("username", ""))
+    password = str(form.get("password", ""))
+    source = request.client.host if request.client else "?"
+    ok = hmac.compare_digest(username, CFG.admin_username) and hmac.compare_digest(password, CFG.admin_password)
+    if not ok and username and password:
+        # Argon2 with t=20 takes ~1s: keep it off the event loop.
+        ok = await run_in_threadpool(verify_game_staff, username, password)
+        if ok:
+            username = username.strip().lower()
+    if ok:
+        log.info("admin panel login: %s from %s", username, source)
         token = make_session(username)
         resp = RedirectResponse("/admin/", status_code=302)
         resp.set_cookie("admin_session", token, httponly=True, samesite="strict", max_age=43200)
         return resp
+    log.warning("admin panel login failed for %r from %s", username, source)
     return RedirectResponse("/admin/login?error=Invalid+credentials", status_code=302)
 
 
