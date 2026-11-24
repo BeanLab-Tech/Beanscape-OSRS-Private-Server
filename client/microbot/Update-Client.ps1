@@ -30,7 +30,13 @@ function Fetch($url, $out) {
     Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing
 }
 function FetchText($url) {
-    (Invoke-WebRequest -Uri $url -UseBasicParsing).Content.Trim()
+    # PowerShell 5.1 returns [byte[]] for text/plain responses and [String] for others.
+    # Normalize to a string first, then trim.
+    $c = (Invoke-WebRequest -Uri $url -UseBasicParsing).Content
+    if ($c -is [System.Byte[]]) {
+        return [System.Text.Encoding]::UTF8.GetString($c).Trim()
+    }
+    return $c.Trim()
 }
 
 New-Item -ItemType Directory -Force $ClientDir | Out-Null
