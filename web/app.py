@@ -244,7 +244,30 @@ async def oauth_start() -> RedirectResponse:
 
 
 @app.get("/oauth/discord/callback")
-async def oauth_callback(request: Request, code: str, state: str = "") -> HTMLResponse:
+async def oauth_callback(
+    request: Request,
+    code: str = "",
+    state: str = "",
+    error: str = "",
+    error_description: str = "",
+) -> HTMLResponse:
+    if error or not code:
+        # Discord sends ?error=... when the user cancels or the authorize URL is wrong
+        # (e.g. a bot-invite link with this redirect_uri and extra scopes).
+        log.warning("oauth callback without code: error=%r description=%r", error, error_description)
+        detail = html.escape(error_description or error or "no authorization code")
+        resp = HTMLResponse(
+            "<!doctype html><html><head><meta charset='utf-8'><title>BeanLab OSRS</title></head>"
+            "<body style='font-family:system-ui,sans-serif;max-width:640px;margin:4rem auto'>"
+            f"<h1>Discord sign-in didn't complete</h1><p>Discord said: <code>{detail}</code></p>"
+            "<p>To register, use the <b>Register</b> button in the Discord registration channel, "
+            "or start again from <a href='/oauth/discord/start'>/oauth/discord/start</a>.</p>"
+            "<p>Inviting the bot? Use a bot invite link (scopes <code>bot applications.commands</code>, "
+            "no redirect URI), not this page.</p></body></html>",
+            status_code=400,
+        )
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
     expected = request.cookies.get(STATE_COOKIE, "")
     if not state or not expected or not secrets.compare_digest(state, expected):
         log.warning("oauth callback rejected: missing or mismatched state")

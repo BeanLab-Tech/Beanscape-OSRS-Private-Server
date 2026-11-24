@@ -283,12 +283,13 @@ async def reset_cmd(interaction: discord.Interaction):
 
 
 class RegisterModal(discord.ui.Modal, title="Register for BeanLab OSRS"):
+    # Discord limits: label 1-45 chars, placeholder up to 100.
     username = discord.ui.TextInput(
-        label="Login name (leave blank for your Discord name)",
+        label="Login name (optional)",
         required=False,
         min_length=2,
         max_length=12,
-        placeholder="2-12: lowercase letters, numbers, spaces, _",
+        placeholder="Blank = your Discord name. 2-12: a-z, 0-9, space, _",
     )
 
     async def on_submit(self, interaction: discord.Interaction):
@@ -312,6 +313,18 @@ class RegisterView(discord.ui.View):
     @discord.ui.button(label="Reset password", style=discord.ButtonStyle.secondary, custom_id="beanlab:reset")
     async def reset_button(self, interaction: discord.Interaction, _button: discord.ui.Button):
         await do_reset(interaction)
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception, item) -> None:
+        # Never fail silently: tell the user, and keep the traceback in the log.
+        log.error("registration panel %s failed for %s", getattr(item, "custom_id", item), interaction.user, exc_info=error)
+        message = "Something went wrong on our side - please tell an admin. Nothing was created."
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(message, ephemeral=True)
+            else:
+                await interaction.response.send_message(message, ephemeral=True)
+        except discord.HTTPException:
+            pass
 
 
 PANEL_MARKER = "BeanLab OSRS registration"
@@ -350,9 +363,27 @@ async def setup_hook():
 @client.event
 async def on_ready():
     log.info("logged in as %s (%s)", client.user, client.user.id)
+    await setup_registration()
+
+
+@client.event
+async def on_guild_join(guild: discord.Guild):
+    # Re-invited (e.g. after a kick): set up right away instead of waiting for a restart.
+    log.info("joined guild %s (%s)", guild.name, guild.id)
+    await setup_registration()
+
+
+async def setup_registration() -> None:
+    """Syncs the slash commands to the registration channel's server and ensures the panel."""
     channel = client.get_channel(CHANNEL_ID)
     if channel is None:
-        log.warning("channel %s not found - check bot permissions/invites", CHANNEL_ID)
+        log.warning(
+            "channel %s not found - is the bot in the server? Invite: "
+            "https://discord.com/oauth2/authorize?client_id=%s&scope=bot+applications.commands"
+            "&permissions=76800",
+            CHANNEL_ID,
+            client.user.id,
+        )
         return
     guild = channel.guild
     try:
@@ -364,7 +395,7 @@ async def on_ready():
         log.error(
             "cannot register slash commands in guild %s: re-invite the bot with the "
             "applications.commands scope: https://discord.com/oauth2/authorize?client_id=%s"
-            "&scope=bot+applications.commands&permissions=11264",
+            "&scope=bot+applications.commands&permissions=76800",
             guild.id,
             client.user.id,
         )

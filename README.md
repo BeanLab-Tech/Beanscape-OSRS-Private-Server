@@ -749,6 +749,19 @@ report the quest name.
 Start again from `/oauth/discord/start` in the same browser (the state cookie lasts 10 minutes and
 works once).
 
+### Re-inviting the bot (after a kick)
+Use a **bot invite** link, not the OAuth2 URL generator with a redirect URI:
+
+```
+https://discord.com/oauth2/authorize?client_id=1555680106070941738&scope=bot+applications.commands&permissions=76800
+```
+
+`76800` = View Channels, Send Messages, Manage Messages (pin the panel, delete posts with passwords)
+and Read Message History (find the pinned panel). Don't add a redirect URI or extra scopes: scopes
+like `rpc.*` or `messages.read` need Discord approval and fail with `invalid_scope`, and a redirect
+URI sends that error to the web sign-up page. The bot sets itself up (slash commands + panel) as
+soon as it joins; no restart needed. If the bot logs `channel ... not found`, it isn't in the server.
+
 ### Discord bot offline / `/register` doesn't appear
 `systemctl status osrs-discord` and `journalctl -u osrs-discord -n 30`. Look for `synced 2 slash
 commands`; if it says `cannot register slash commands`, re-invite the bot with the URL it logs.
