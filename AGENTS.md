@@ -21,6 +21,7 @@ api/account/.../CharacterAccountApplier.kt   forces player.members = true at log
 api/config/.../BaseObjs.kt           adds objs.rotten_potato
 content/other/admin-potato/          rotten potato menu, ::teleports/::tp (TeleportCatalog/Menu),
                                      ::questsdone (QuestCommands + generated QuestProgressVars)
+content/other/beanlab-smithing/      mining, smelting, smithing (data in SmithingData.kt)
 content/other/beanlab-content/       generic door/gate pass-through (unimplemented-op slot),
                                      eating/drinking (registered on GameLifecycle.Startup)
 content/other/grandexchange/         GE engine (GeBook), ::ge commands (GeCommands), tests

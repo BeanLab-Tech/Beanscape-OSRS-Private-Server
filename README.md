@@ -45,6 +45,7 @@ fork) or RuneLite via RSProx, locked behind the tailnet.
 | Admin web panel | `web/admin_app.py` (`osrs-admin`) | `https://runescape-server.tail5475a4.ts.net/admin` |
 | Discord registration (`/register`, `/resetpassword`) | `discordbot/bot.py` (`osrs-discord`) | Slash commands, ephemeral replies, linked to Discord ID |
 | Generic doors & gates | `content/other/beanlab-content/GenericDoorsScript.kt` | ~900 unscripted doors/gates (incl. members gates) become passable |
+| Mining, smelting, smithing | `content/other/beanlab-smithing/` | 72 rock types, 41 furnaces, 17 anvils; menus for bars/items |
 | Eating & drinking | `content/other/beanlab-content/ConsumablesScript.kt` | Every Eat/Drink item: food heals, potions boost/restore, doses step down |
 | Microbot client patcher + launcher | `client/microbot/` | Microbot 2.0.20 = RuneLite 1.11.19 = rev 233 |
 | Client webconfig | `webconfig/` (`osrs-webconfig`) | `jav_config.ws`, `world_list.ws`, RuneLite `worlds.js`, version file; served no-cache |
@@ -54,9 +55,9 @@ fork) or RuneLite via RSProx, locked behind the tailnet.
 RsMod upstream content is thin (upstream has Lumbridge, cooking, fishing, woodcutting, combat
 spells, special attacks, banks, some generic NPCs/objects). Still missing, roughly by impact:
 
-- **Skills:** mining, smithing, firemaking, crafting, fletching, herblore, prayer (bones), agility,
-  thieving, runecrafting, slayer, hunter, farming, construction (cooking, fishing and woodcutting
-  exist; quests are only marked complete by `::questsdone`)
+- **Skills:** firemaking, crafting, fletching, herblore, prayer (bones), agility,
+  thieving, runecrafting, slayer, hunter, farming, construction (cooking, fishing, woodcutting,
+  mining and smithing exist; quests are only marked complete by `::questsdone`)
 - **Objects:** agility shortcuts, stiles, levers, most skilling objects, diagonal doors
 - **NPC content:** shops, most dialogue, boss mechanics (bosses spawn with stats only)
 - **Item effects:** poison/antipoison, special potions (divine, antifire, stamina's run-drain
@@ -332,6 +333,21 @@ change. Scripted boss mechanics are mostly not implemented upstream.
 
 ---
 
+### Mining & smithing (`content/other/beanlab-smithing`)
+
+- **Mining:** click a rock (or ore vein) with a pickaxe in your inventory or hand. The best pickaxe
+  you can use is picked automatically (bronze to crystal; better = faster and more likely). One ore
+  empties the rock; it respawns after the ore's respawn time. Levels/XP follow OSRS: clay/copper/tin
+  1, limestone 10, iron 15, silver 20, coal 30, gold 40, mithril 55, soft clay & adamantite 70,
+  runite 85, amethyst 92.
+- **Smelting:** "Smelt" a furnace or use an ore on it, pick the bar and how many (1/5/10/All).
+  Bronze, iron (50% success), silver, steel, gold, mithril, adamantite, runite.
+- **Smithing:** with a hammer, use a bar on an anvil (or "Smith" it), pick the item and how many.
+  22 items per metal (dagger to platebody, incl. bolts, dart tips, arrowtips, knives), bronze to rune.
+- Data (levels, XP, success rates, respawn times, recipes) is in `SmithingData.kt`. Startup logs
+  `[beanlab] mining/smithing registered` and lists `'Mine' locs not covered` (special rocks like gem
+  rocks, essence, rubble, crashed stars need their own content).
+
 ## In-Game Commands
 
 ### Everyone
@@ -548,6 +564,9 @@ cd /opt/osrs/server/rsmod && git bundle create /opt/osrs/backups/osrs-server.bun
 ## Changelog
 
 ### 2026-11-24
+- **Mining & smithing:** 72 rock types (ore rocks and veins, limestone, soft clay, amethyst) with
+  pickaxe tiers, success rolls, depletion/respawn; smelting 8 bars at 41 furnace types (ore on
+  furnace or "Smelt"); smithing 22 items per metal (bronze to rune) at 17 anvil types with a hammer.
 - **Doors & gates:** every unscripted door/gate (902, incl. members gates) is passable: using it
   walks you through. Hand-scripted animated doors are unchanged.
 - **Food & potions:** RsMod had no eating or drinking; 347 foods and 510 potion doses now work
