@@ -556,6 +556,24 @@ This GitHub repo holds the overlay (`main`; work happens on `ferox-buildout`). T
 its own upstream-rooted history; sync by content projection (copy files into a clone of this repo,
 commit, push) as described in `AGENTS.md`. Never push to `origin` on the VM (that's upstream rsmod).
 
+### Admin console API
+
+`content/other/admin-api` serves the in-client admin console (the Beanscape Admin plugin). It listens
+on `127.0.0.1:8087` only, so expose it with `tailscale serve`, next to the existing paths:
+
+```bash
+sudo tailscale serve --bg --set-path /adminapi http://127.0.0.1:8087
+```
+
+- **Tokens:** an owner runs `::admintoken` in game (`::admintoken revoke` revokes them). The token is
+  shown once in chat; only its SHA-256 is stored (`admin_tokens`, V12). For now only owner accounts
+  can use the API (`DbTokenStore.MIN_TOKEN_RANK`). The account's mod level is read on every request.
+- **Rules:** every route has a minimum rank; nobody can act on someone ranked above them or hand out
+  a rank above their own; all writes land in `admin_audit` (refusals included).
+- **Switches:** `ADMIN_API_ENABLED=false` keeps the listener off; `ADMIN_API_PORT` changes the port.
+- **Deploying:** V12 runs on boot. Stop `osrs-server` before building, as for any overlay change.
+- Not yet tested on the live server: the game-side actions (teleport, summon, give, stats, kick).
+
 ### Backups
 
 ```bash

@@ -17,10 +17,14 @@ api/db/src/main/resources/db/migration/
   V9__beanlab_realm_hardening.sql    real auth + Discord-only registration on the `dev` realm
   V10__discord_oauth.sql             Discord OAuth columns
   V11__beanlab_members_for_all.sql   every account members
+  V12__admin_api.sql                 admin_tokens + admin_audit (admin console API)
 api/account/.../CharacterAccountApplier.kt   forces player.members = true at login
 api/config/.../BaseObjs.kt           adds objs.rotten_potato
 content/other/admin-potato/          rotten potato menu, ::teleports/::tp (TeleportCatalog/Menu),
                                      ::questsdone (QuestCommands + generated QuestProgressVars)
+content/other/admin-api/             loopback HTTP API for the in-client admin console (AdminRouter
+                                     holds every permission rule; GameBackend runs on the game
+                                     thread via GameAccess), ::admintoken (owner), tests
 content/other/beanlab-smithing/      mining, smelting, smithing (data in SmithingData.kt)
 content/other/beanlab-skills/        prayer, firemaking, cooking (data in SkillsData.kt)
 content/other/beanlab-content/       generic door/gate pass-through (unimplemented-op slot),
