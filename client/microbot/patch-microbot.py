@@ -2,16 +2,21 @@
 """Patch Microbot 2.0.20 (RuneLite 1.11.19, OSRS rev 233) to log in to the BeanLab server directly.
 
 Usage:
-    python patch-microbot.py microbot-2.0.20.jar microbot-2.0.20-beanlab.jar <server modulus hex>
+    python patch-microbot.py microbot-2.0.20.jar microbot-2.0.20-beanlab.jar <server modulus hex> [server base URL]
 
 The modulus is the `modulus:` value of the BeanLab target in ~/.rsprox/proxy-targets.yaml, i.e.
 the public half of the server's RSA login key (.data/game.key on the VM). It is not secret.
+The server base URL defaults to https://runescape-server.tail5475a4.ts.net.
 
-Exactly two constants change (the same two RSProx changes when it patches RuneLite):
+Exactly three constants change:
   bc.class  Jagex's RSA login modulus  ->  the BeanLab server's modulus
   bl.class  host allowlist entry "127.0.0.1" -> ""  (endsWith("") lets the client accept any host)
-The game port stays 43594, and the server address comes from --jav_config at launch.
-Every other jar entry is copied byte for byte.
+  plugins/microbot/MicrobotVersionChecker.class
+            https://microbot.cloud/api/version/client -> <base>/runelite/microbot-version.txt
+            (that file says 2.0.20, the newest Microbot on OSRS rev 233, so the client stops
+            flagging itself "NEW CLIENT AVAILABLE"; newer Microbot can't log in to rev 233)
+The first two are the same changes RSProx makes to RuneLite. The game port stays 43594, and the
+server address comes from --jav_config at launch. Every other jar entry is copied byte for byte.
 """
 
 import hashlib
@@ -25,6 +30,9 @@ JAGEX_MODULUS = (
     "19a48f71c539c9f1f4e59aadd5e2ad681f3e1270313ef044889faee740f641ea0f8b341d44f388758e12b893f4"
     "6fb7515ed8dc9b6ded076f1a621cf0d6f2157a32434e5f3028e3baf3ff2f08ab86de8776638f"
 )
+VERSION_CHECKER = "net/runelite/client/plugins/microbot/MicrobotVersionChecker.class"
+MICROBOT_VERSION_URL = "https://microbot.cloud/api/version/client"
+DEFAULT_SERVER_BASE = "https://runescape-server.tail5475a4.ts.net"
 
 # Constant-pool entry sizes (excluding the tag byte) for non-UTF8 tags.
 _CP_SIZES = {3: 4, 4: 4, 5: 8, 6: 8, 7: 2, 8: 2, 16: 2, 19: 2, 20: 2, 9: 4, 10: 4, 11: 4, 12: 4,
@@ -63,11 +71,14 @@ def rewrite_utf8_constants(data: bytes, replacements: dict[bytes, bytes]) -> byt
 
 
 def main() -> None:
-    if len(sys.argv) != 4:
+    if len(sys.argv) not in (4, 5):
         raise SystemExit(__doc__)
     src, dst, modulus = sys.argv[1], sys.argv[2], sys.argv[3].strip().lower()
+    base = (sys.argv[4] if len(sys.argv) == 5 else DEFAULT_SERVER_BASE).rstrip("/")
     if len(modulus) != len(JAGEX_MODULUS) or any(c not in "0123456789abcdef" for c in modulus):
         raise SystemExit(f"modulus must be {len(JAGEX_MODULUS)} hex chars (1024-bit key)")
+    if not base.startswith("https://"):
+        raise SystemExit("server base URL must start with https://")
 
     with open(src, "rb") as f:
         digest = hashlib.sha256(f.read()).hexdigest()
@@ -77,6 +88,7 @@ def main() -> None:
     patches = {
         "bc.class": {JAGEX_MODULUS.encode(): modulus.encode()},
         "bl.class": {b"127.0.0.1": b""},
+        VERSION_CHECKER: {MICROBOT_VERSION_URL.encode(): f"{base}/runelite/microbot-version.txt".encode()},
     }
     with zipfile.ZipFile(src) as zin, zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as zout:
         for info in zin.infolist():

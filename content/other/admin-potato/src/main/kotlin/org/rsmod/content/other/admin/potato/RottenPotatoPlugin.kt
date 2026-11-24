@@ -16,6 +16,7 @@ import org.rsmod.api.utils.system.SafeServiceExit
 import org.rsmod.game.stat.PlayerSkillXPTable
 import org.rsmod.game.type.mod.ModLevelType
 import org.rsmod.game.type.mod.ModLevelTypeList
+import org.rsmod.game.type.obj.ObjTypeList
 import org.rsmod.game.type.stat.StatTypeList
 import org.rsmod.map.CoordGrid
 import org.rsmod.plugin.scripts.PluginScript
@@ -31,8 +32,11 @@ import org.rsmod.plugin.scripts.PluginScript
  */
 public class RottenPotatoPlugin
 @Inject
-constructor(private val statTypes: StatTypeList, private val modLevelTypes: ModLevelTypeList) :
-    PluginScript() {
+constructor(
+    private val statTypes: StatTypeList,
+    private val modLevelTypes: ModLevelTypeList,
+    private val objTypes: ObjTypeList,
+) : PluginScript() {
 
     private val logger = InlineLogger()
 
@@ -143,7 +147,14 @@ constructor(private val statTypes: StatTypeList, private val modLevelTypes: ModL
     private suspend fun ProtectedAccess.spawnItem() {
         // Native OSRS item search (same box as the GE): type part of a name, pick from the list.
         // stockMarketRestriction = false so untradeables are searchable too.
-        val obj = objDialog("Spawn which item?", stockMarketRestriction = false)
+        val picked = objDialog("Spawn which item?", stockMarketRestriction = false)
+        // The unrestricted search also lists each item's bank placeholder: a separate obj named
+        // "null" server-side. Spawn the real item it stands for instead.
+        val obj = if (picked.isPlaceholder) objTypes[picked.placeholderlink] ?: picked else picked
+        if (obj.isPlaceholder || obj.name == "null") {
+            mes("That entry isn't a real item (id ${picked.id}). Pick the other result.")
+            return
+        }
         val count = countDialog("How many ${obj.name}?")
         if (count <= 0) {
             mes("Nothing spawned.")

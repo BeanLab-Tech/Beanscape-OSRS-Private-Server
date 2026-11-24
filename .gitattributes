@@ -1,0 +1,2 @@
+# Served to game clients as-is: keep exact bytes (jav_config.ws is CRLF, world_list.ws is binary).
+webconfig/www/** -text

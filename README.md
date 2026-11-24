@@ -43,8 +43,29 @@ fork) or RuneLite via RSProx, locked behind the tailnet.
 | Members for every account | `api/account/.../CharacterAccountApplier.kt` + V11 | Forced at login |
 | Discord OAuth registration | `web/app.py` (`osrs-web`) | `https://runescape-server.tail5475a4.ts.net/oauth/discord/start` |
 | Admin web panel | `web/admin_app.py` (`osrs-admin`) | `https://runescape-server.tail5475a4.ts.net/admin` |
-| Discord `!register` bot | `discordbot/bot.py` (`osrs-discord`, disabled by default) | Password only ever sent by DM |
+| Discord registration (`/register`, `/resetpassword`) | `discordbot/bot.py` (`osrs-discord`) | Slash commands, ephemeral replies, linked to Discord ID |
+| Generic doors & gates | `content/other/beanlab-content/GenericDoorsScript.kt` | ~900 unscripted doors/gates (incl. members gates) become passable |
+| Prayer, firemaking, cooking | `content/other/beanlab-skills/` | Bury/scatter, altars, light logs (fires + ashes), cook on fires/ranges |
+| Mining, smelting, smithing | `content/other/beanlab-smithing/` | 72 rock types, 41 furnaces, 17 anvils; menus for bars/items |
+| Eating & drinking | `content/other/beanlab-content/ConsumablesScript.kt` | Every Eat/Drink item: food heals, potions boost/restore, doses step down |
 | Microbot client patcher + launcher | `client/microbot/` | Microbot 2.0.20 = RuneLite 1.11.19 = rev 233 |
+| Client webconfig | `webconfig/` (`osrs-webconfig`) | `jav_config.ws`, `world_list.ws`, RuneLite `worlds.js`, version file; served no-cache |
+
+### Not yet implemented
+
+RsMod upstream content is thin (upstream has Lumbridge, fishing, woodcutting, combat spells,
+special attacks, banks, some generic NPCs/objects; its cooking module is an empty placeholder). Still missing, roughly by impact:
+
+- **Skills:** crafting, fletching, herblore, agility,
+  thieving, runecrafting, slayer, hunter, farming, construction (fishing, woodcutting, mining,
+  smithing, prayer, firemaking and basic cooking exist; quests are only marked complete by `::questsdone`)
+- **Objects:** agility shortcuts, stiles, levers, most skilling objects, diagonal doors
+- **NPC content:** shops, most dialogue, boss mechanics (bosses spawn with stats only)
+- **Item effects:** poison/antipoison, special potions (divine, antifire, stamina's run-drain
+  reduction), multi-bite foods eat in one bite, anglerfish overheal
+
+Each is a module under `content/`; see [Adding Content](#adding-content). Use `::teleports` to
+reach areas whose entrances aren't scripted.
 
 ---
 
@@ -126,15 +147,22 @@ python client\microbot\patch-microbot.py `
   d6ac773e2baf663e78d82337e3f1e4ccd46e2b4b4235e6be93f11bbb445a3c7a3a01f1dac3feee2a0e14740cda715ec18f6d746e67ef7a50e876041f6ac3db95abbf8b6ce9973cc05d134d4afa35d749831fb2073f42644360d6da342d62f95479c2be2650cade3aeba76e73a05495fe8f6bb871dcb2e657b34e20b0ed94bf13
 ```
 
-Expected output: `patched bc.class`, `patched bl.class`, `wrote ...`. What it changes:
+Expected output: three `patched ...` lines, then `wrote ...`. What it changes:
 
 | Class | Constant | Change |
 |-------|----------|--------|
 | `bc.class` | RSA login modulus | Jagex's key → the BeanLab server key (the modulus above, same as in `proxy-targets.yaml`) |
 | `bl.class` | host allowlist entry `127.0.0.1` | `""`, so the client accepts the BeanLab host (same trick RSProx uses) |
+| `MicrobotVersionChecker.class` | `https://microbot.cloud/api/version/client` | `<server>/runelite/microbot-version.txt`, which says `2.0.20`, so the client stops marking itself "NEW CLIENT AVAILABLE" |
 
 Everything else is copied byte for byte; the game port stays 43594. If the server's RSA key ever
-changes, re-run this step with the new modulus against the **original** jar.
+changes, re-run this step with the new modulus against the **original** jar. An optional 4th
+argument sets the server base URL (default `https://runescape-server.tail5475a4.ts.net`).
+
+> **Why not the latest Microbot?** Each Microbot release bundles the game client for one OSRS
+> revision. The newest (2.6.x, RuneLite 1.13.x) targets a much newer revision than rev 233, and
+> RsMod upstream has no newer revision to move to, so 2.0.20 is the newest Microbot that can log in.
+> The version file tells the client that 2.0.20 is current *for this server*.
 
 ### Step 4 — Install the launcher
 
@@ -142,12 +170,18 @@ changes, re-run this step with the new modulus against the **original** jar.
 copy client\microbot\Play-Microbot.bat "$env:USERPROFILE\Desktop\OSRS-Microbot-Client\"
 ```
 
-`Play-Microbot.bat` runs the patched jar with
-`--jav_config=https://runescape-server.tail5475a4.ts.net/jav_config.ws`, and sets
-`-Duser.home=.\home` so Microbot's profile, plugins, logs and cache live in
-`OSRS-Microbot-Client\home\` and never touch a normal RuneLite install (or your live account's
-settings). It looks for Temurin 21 under `C:\Program Files\Eclipse Adoptium\`; edit `JAVAW` if
-yours is elsewhere.
+`Play-Microbot.bat` runs the patched jar with:
+
+- `--jav_config=<server>/jav_config.ws`: game server address, world 1, members world flags
+- `-Drunelite.http-service.url=<server>/runelite`: RuneLite's API base. RuneLite (and Microbot's
+  `Rs2Player.isInMemberWorld()`) get the world list from `<base>/worlds.js`; the server publishes
+  world 1 as `MEMBERS`. Without this they ask `api.runelite.net`, which no longer serves 1.11.19.
+- `-Duser.home=.\home`: Microbot's profile, plugins, logs and cache live in
+  `OSRS-Microbot-Client\home\` and never touch a normal RuneLite install (or your live account's
+  settings)
+
+It looks for Temurin 21 under `C:\Program Files\Eclipse Adoptium\`; edit `JAVAW` if yours is
+elsewhere. `SERVER` at the top sets the server URL.
 
 ### Step 5 — Register and log in
 
@@ -155,10 +189,11 @@ yours is elsewhere.
 2. Double-click `Play-Microbot.bat`. First launch downloads the game cache from the server (~1 min)
 3. **Existing user** → username + password → **Login**
 
-**When Microbot says "New Microbot client version available": ignore it.** Updating breaks the
-connection (see above). Expect a few harmless log warnings: RuneLite's price/world lookups against
-`api.runelite.net` 404 for this old version (the in-game world list comes from the server), and
-some bundled Microbot plugins (e.g. Quest Helper) expect live-game data RsMod doesn't implement.
+4. Check membership: the **Account** tab shows 3650 days of membership, and Microbot scripts treat
+   the account and world as members (see [Membership](#membership))
+
+**Never update Microbot past 2.0.20**, even if something offers it (see Step 3). Some bundled
+Microbot plugins (e.g. Quest Helper) expect live-game data RsMod doesn't implement and log errors.
 
 ---
 
@@ -192,7 +227,39 @@ Useful for packet inspection. RSProx launches RuneLite 1.11.19 and patches it on
 
 ## Registration
 
-Registration is required (`require_registration=1`, V9). Two paths, both tailnet-only:
+Registration is required (`require_registration=1`, V9). Two self-service paths, both tailnet-only,
+plus admins can create accounts in the admin panel (`/admin` → Accounts → New; same Argon2i hash as
+the game).
+
+### Admin panel sign-in
+
+`https://runescape-server.tail5475a4.ts.net/admin` accepts:
+
+- the panel's own login from `/opt/osrs/web/admin_config.json`, or
+- a **game account that is both listed in `admin_config.json` `"panel_users"` and an unbanned
+  `owner`**, using its game username and password (checked against its Argon2i hash).
+
+To give someone panel access: make their game account `owner`, then add their login name to
+`panel_users` on the VM (`sudo nano /opt/osrs/web/admin_config.json`, e.g.
+`"panel_users": ["umpix"]`) and `systemctl restart osrs-admin`. Currently: none (emptied in the 2026-11-24 fresh start).
+
+Safeguards:
+- **Owner only.** The panel creates accounts and sets modlevels, so admins can't sign in (they
+  could otherwise create owners). A game modlevel alone never grants access; the allowlist only
+  lives on the VM.
+- **Live re-check.** Game-account sessions are re-checked on every page; demoting, banning,
+  deleting or unlisting the account ends the session immediately. Logout deletes the session.
+- **Lockout.** Within 15 minutes, 5 failures from one device (its tailnet IP) or 20 failures for one
+  game username block further attempts ("Too many attempts"). The config admin login is never
+  locked by name (so nobody can lock you out by spamming it); instead, after 10 failures on it in
+  15 minutes from any devices, every further attempt on it waits 5 seconds. Only the exact config
+  username gets that treatment; case or spacing variants are limited like game usernames. Each
+  attempt is counted before the password check, so simultaneous attempts can't slip past the limit,
+  and a successful login doesn't reset a device's earlier failures. Failures all take the same
+  time (a dummy Argon2 check runs for unknown or ineligible users), and at most 2 Argon2 checks run
+  at once. A restart of `osrs-admin` clears all counters.
+- Logins, failures, lockouts and revocations are logged:
+  `journalctl -u osrs-admin | grep "admin panel"`.
 
 ### Web (Discord OAuth) — `osrs-web`
 
@@ -204,20 +271,40 @@ Your username is your Discord global name (lowercased, 2-12 chars). Discord IDs 
 CSRF-protected: it only works when started from `/oauth/discord/start` in the same browser, within
 10 minutes.
 
-### Discord bot (`!register`) — `osrs-discord` (disabled by default)
+### In Discord (slash commands) — `osrs-discord` (recommended)
+
+The bot keeps one **pinned message** in the registration channel with two buttons:
+
+- **Register**: opens a short form (login name, optional; blank = your Discord name), then
+  creates your account
+- **Reset password**: new password for the account linked to your Discord
+
+The same actions as slash commands:
 
 ```
-!register <username>        # 2-12 chars: lowercase letters, numbers, underscore
+/register                     # login name defaults to your Discord name
+/register username:<name>     # or pick one: 2-12 lowercase letters, numbers, spaces, _
+/resetpassword                # new password for the account linked to your Discord
 ```
 
-1. **Open your DMs first** (Server menu → Privacy Settings → allow DMs from server members)
-2. The bot DMs a generated 16-character password. If it can't DM you, it creates nothing.
+The reply is **ephemeral**: only you see it, with your username and a generated 16-character
+password. Save it before dismissing the message. No DMs or browser needed.
 
-The bot never accepts or posts a password in the channel: a `!register` with anything after the
-username is deleted (needs **Manage Messages**) and refused. If the credentials DM fails, the new
-account is rolled back. Accounts use Argon2i (m=65536, t=20, p=1), the same as the game server.
+- Discord authenticates whoever runs a slash command, so the bot gets your verified Discord ID
+  directly (no OAuth redirect). Your game account is **linked to that Discord ID**: one account per
+  Discord user, shared with the web registration below. Running `/register` again tells you your
+  existing username.
+- `/resetpassword` only changes the account linked to *your* Discord, so it can't touch anyone
+  else's. A 30-second cooldown applies to both commands.
+- The old `!register` text command now just points to `/register`; a `!register` with anything
+  after the username is deleted (needs **Manage Messages**) in case it contained a password.
+- Accounts use Argon2i (m=65536, t=20, p=1), the same as the game server.
 
-To run the bot: `systemctl enable --now osrs-discord` (token file: `/opt/osrs/config/ned_discord_token`).
+On startup the bot syncs its commands (`synced 2 slash commands`) and posts and pins the
+registration message if it isn't already pinned (`posted registration panel` / `already pinned`;
+the buttons keep working across restarts). If it logs `cannot register slash commands`, re-invite it with the
+`applications.commands` scope using the URL in that log line. Token file:
+`/opt/osrs/config/ned_discord_token`.
 
 ---
 
@@ -230,10 +317,19 @@ To run the bot: `systemctl enable --now osrs-discord` (token file: `/opt/osrs/co
 - Everyone can use `::name` and `::ge`; admin tools need a mod level (see below)
 
 ### Membership
-`CharacterAccountApplier` forces `player.members = true` at login, because accounts are created by
-four paths (game server, web, admin panel, Discord bot) that all default `members` to 0. Migration
-V11 set the column to 1 for existing accounts so the DB and admin panel agree. World 1 is already
-flagged members in `world_list.ws`.
+Every account is a member on a members world. That takes five settings, because the game, the
+client and Microbot each check membership differently:
+
+| Check | Reads | Set by |
+|-------|-------|--------|
+| Server + login response `member` | `player.members` | `CharacterAccountApplier` forces `true` at login (the four account-creation paths default `members` to 0); V11 set the DB column to 1 |
+| Membership days (Account tab, Microbot `Rs2Player.isMember()`) | varp 1780 `account_credit` > 0 | `CharacterAccountApplier` sets 3650 at login, after saved varps load |
+| Client world type (`client.getWorldType()`) | `jav_config.ws` `param=5` (bitmask, 1 = members) | `webconfig/www/jav_config.ws` |
+| Client world number (`client.getWorld()`) | `jav_config.ws` `param=12` | `1`, matching `world_list.ws` (was `255`, which broke the next check) |
+| Microbot `Rs2Player.isInMemberWorld()` | RuneLite world list: world with `client.getWorld()`'s id has `MEMBERS` | `webconfig/www/runelite/worlds.js` + the launcher's `-Drunelite.http-service.url` |
+
+Without the last three, Microbot scripts treat the account as free-to-play (members areas,
+teleports and items skipped) even though the server allows everything.
 
 ### Controls
 Standard OSRS controls; RuneLite/Microbot plugins work. **ESC** toggles the sidebar; **F1–F6** open
@@ -244,6 +340,33 @@ RsMod's default rev 233 content: standard NPCs, combat and skills, plus the Gran
 change. Scripted boss mechanics are mostly not implemented upstream.
 
 ---
+
+### Prayer, firemaking & cooking (`content/other/beanlab-skills`)
+
+- **Prayer:** "Bury" bones (normal 4.5 XP up to superior dragon 150) or "Scatter" demonic ashes.
+  "Pray-at" any altar to restore your Prayer points.
+- **Firemaking:** use a tinderbox on logs (normal to redwood, OSRS levels/XP) to light a fire where
+  you stand; you step west. The fire burns 100-200 ticks, then leaves ashes. You can't light a fire
+  on top of another.
+- **Cooking:** use raw food on any fire (including ones you light) or range; pick an amount if you
+  have several. 26 foods from shrimps to manta ray; burn chance drops to zero at each food's
+  stop-burn level, ranges burn slightly less. Burnt food goes to its burnt item.
+- Data: `SkillsData.kt`. Startup logs `[beanlab] skills registered: ...`.
+
+### Mining & smithing (`content/other/beanlab-smithing`)
+
+- **Mining:** click a rock (or ore vein) with a pickaxe in your inventory or hand. The best pickaxe
+  you can use is picked automatically (bronze to crystal; better = faster and more likely). One ore
+  empties the rock; it respawns after the ore's respawn time. Levels/XP follow OSRS: clay/copper/tin
+  1, limestone 10, iron 15, silver 20, coal 30, gold 40, mithril 55, soft clay & adamantite 70,
+  runite 85, amethyst 92.
+- **Smelting:** "Smelt" a furnace or use an ore on it, pick the bar and how many (1/5/10/All).
+  Bronze, iron (50% success), silver, steel, gold, mithril, adamantite, runite.
+- **Smithing:** with a hammer, use a bar on an anvil (or "Smith" it), pick the item and how many.
+  22 items per metal (dagger to platebody, incl. bolts, dart tips, arrowtips, knives), bronze to rune.
+- Data (levels, XP, success rates, respawn times, recipes) is in `SmithingData.kt`. Startup logs
+  `[beanlab] mining/smithing registered` and lists `'Mine' locs not covered` (special rocks like gem
+  rocks, essence, rubble, crashed stars need their own content).
 
 ## In-Game Commands
 
@@ -336,6 +459,13 @@ journalctl -u osrs-server -f      # wait for "Bound to ports: 43594"; Flyway mig
 > its shutdown hook then fails (`NoClassDefFoundError`) and online players lose progress since the
 > last autosave.
 
+Client webconfig: copy `webconfig/www/*` to `/opt/osrs/config/webconfig/` (keep `jav_config.ws`'s
+CRLF line endings; `.gitattributes` stores these files byte for byte) and `webconfig/serve.py` to
+`/opt/osrs/config/webconfig-serve.py`, install `webconfig/systemd/osrs-webconfig-no-cache.conf` as
+`/etc/systemd/system/osrs-webconfig.service.d/no-cache.conf`, then
+`systemctl daemon-reload && systemctl restart osrs-webconfig`. No game-server restart is needed,
+but clients only pick up a changed `jav_config.ws` on their next launch.
+
 Web and bot code: copy `web/*.py` + `web/admin_templates/` to `/opt/osrs/web/` and
 `discordbot/bot.py` to `/opt/osrs/discordbot/`, then `systemctl restart osrs-web osrs-admin`
 (and `osrs-discord` if enabled). Secrets are not in this repo: `web/config.json` (see
@@ -350,10 +480,10 @@ Web and bot code: copy `web/*.py` + `web/admin_templates/` to `/opt/osrs/web/` a
 | Unit | Purpose | State |
 |------|---------|-------|
 | `osrs-server.service` | RsMod game server (:43594) | enabled |
-| `osrs-webconfig.service` | `jav_config.ws` + `world_list.ws` (python http.server :8080) | enabled |
+| `osrs-webconfig.service` | Client webconfig (`webconfig-serve.py`, no-cache, :8080, `/`) | enabled |
 | `osrs-web.service` | Discord OAuth registration (:8085, `/oauth`) | enabled |
 | `osrs-admin.service` | Admin panel (:8086, `/admin`) | enabled |
-| `osrs-discord.service` | `!register` bot | **disabled** |
+| `osrs-discord.service` | Discord `/register` + `/resetpassword` bot | enabled |
 
 ```bash
 systemctl status osrs-server
@@ -472,6 +602,28 @@ cd /opt/osrs/server/rsmod && git bundle create /opt/osrs/backups/osrs-server.bun
 ## Changelog
 
 ### 2026-11-24
+- **Fresh start:** all accounts, characters, stats, inventories and GE data wiped (backup:
+  `/opt/osrs/backups/game-2026-11-24-134327-pre-wipe.db`); `panel_users` emptied. Owners are
+  promoted manually after registering (admin panel → account → modlevel, plus `panel_users`).
+- **Discord registration panel:** pinned message with Register (opens a form) and Reset password
+  buttons, alongside `/register` and `/resetpassword`.
+- **Prayer, firemaking, cooking:** bury 55 bone/ash types, pray at 44 altar types; tinderbox on 12
+  log types lights a real fire (ashes when it burns out); cook 26 raw foods on 120 fire/range types
+  with level-based burning. (Upstream's cooking module turned out to be empty.)
+- **Mining & smithing:** 72 rock types (ore rocks and veins, limestone, soft clay, amethyst) with
+  pickaxe tiers, success rolls, depletion/respawn; smelting 8 bars at 41 furnace types (ore on
+  furnace or "Smelt"); smithing 22 items per metal (bronze to rune) at 17 anvil types with a hammer.
+- **Doors & gates:** every unscripted door/gate (902, incl. members gates) is passable: using it
+  walks you through. Hand-scripted animated doors are unchanged.
+- **Food & potions:** RsMod had no eating or drinking; 347 foods and 510 potion doses now work
+  (heal table, combat/ranging/magic/prayer/restore/brew/energy effects, dose step-down, 3-tick delay).
+- **Discord registration in Discord:** `/register` and `/resetpassword` slash commands with
+  ephemeral replies, linked to the Discord ID; `osrs-discord` enabled.
+- **Admin panel:** allowlisted owner game accounts (`panel_users`) can sign in with their game password (before, only
+  the single `admin_config.json` login worked, so staff accounts created in the panel got
+  "Invalid credentials").
+- **Potato spawn:** the item search lists each item's bank placeholder too (named "null"
+  server-side, shown with the real name in the client); picking it now spawns the real item.
 - **Rotten potato:** fixed "Set all stats" and "Spawn item" (the menu modal stayed open, so RsMod
   silently aborted the follow-up text prompt); spawn by item **name** via the native item search;
   menu gated by modlevel (privilege-escalation fix: moderators could set themselves owner).
@@ -484,6 +636,15 @@ cd /opt/osrs/server/rsmod && git bundle create /opt/osrs/backups/osrs-server.bun
   versioned in `discordbot/`.
 - **Web registration:** CSRF-safe OAuth state, HTML escaping, no-store; restyled landing page.
 - **Ops:** documented stop-before-build; `ktfmt` applied to the admin-potato module.
+- **Membership in Microbot:** membership days (varp 1780) set at login; `jav_config.ws` world
+  number fixed (255 → 1); RuneLite world list (`runelite/worlds.js`) served from the VM and wired
+  in with `-Drunelite.http-service.url`. Microbot's `isMember()`/`isInMemberWorld()` now return true.
+- **Microbot "out of date":** version check points at the server (`microbot-version.txt` = 2.0.20,
+  the newest Microbot on rev 233); `prices.js` served empty to stop 404s.
+- **Webconfig:** now versioned in `webconfig/` and served with `Cache-Control: no-cache` (clients
+  had cached a stale `jav_config.ws` for days).
+- **Repo:** moved to `BeanLab-Tech`; Claude Code workflow (trusted users only, SHA-pinned);
+  Dependabot for actions; CI `workflow_dispatch`.
 
 ### 2026-10-28 / 29
 Grand Exchange, `::name`, Discord registration, realm hardening (V9) — see
@@ -498,7 +659,7 @@ Grand Exchange, `::name`, Discord registration, realm hardening (V9) — see
 | 1. Tailnet-only, no public access | ✅ Done | ufw default deny, 22+43594 scoped to `100.64.0.0/10` |
 | 2. Client | ✅ Done | Microbot 2.0.20 direct (patched) and RuneLite 1.11.19 via RSProx; both reach login |
 | 3. Grand Exchange | 🟡 Code complete | Engine + `::ge`, unit-tested; not yet tested in-game |
-| 4. Discord registration + name change | ✅ Web live / 🟡 bot disabled | OAuth registration on `/oauth`; bot fixed but `osrs-discord` disabled |
+| 4. Discord registration + name change | ✅ Done | `/register` in Discord (ephemeral, linked to Discord ID) + web OAuth on `/oauth` |
 | 5. Admin tooling | ✅ Done | Potato menu, teleports, `::questsdone`, members for all |
 
 **Infrastructure:** `osrs-server` on 43594 · tailnet 100.98.119.38 (tag:game) · ufw baseline ·
@@ -515,7 +676,7 @@ Full reasoning in [`docs/AUDIT_2026-10-29.md`](docs/AUDIT_2026-10-29.md) §6.
 1. **Live-test** `::ge` (incl. restart with open offers), `::name` with two accounts, and the
    teleport destinations (fix any that land off-target)
 2. **Nightly `game.db` backups** (`sqlite3 .backup`) and a fresh Proxmox snapshot
-3. Decide whether to re-enable `osrs-discord` alongside web registration
+3. Pick the next missing content (see [Not yet implemented](#not-yet-implemented))
 
 ### Next
 4. Name-change rules: cooldown, profanity filter, reserved names
@@ -539,6 +700,42 @@ Full reasoning in [`docs/AUDIT_2026-10-29.md`](docs/AUDIT_2026-10-29.md) §6.
 2. Did you accept a Microbot update? Re-patch from `original\microbot-2.0.20.jar` (only 2.0.20 works)
 3. Did the server key change? Re-run `patch-microbot.py` with the new modulus
 4. Check `OSRS-Microbot-Client\home\.runelite\logs\client.log`
+
+### Microbot scripts act free-to-play / still say "NEW CLIENT AVAILABLE"
+1. Launch with the current `Play-Microbot.bat` (it must pass `-Drunelite.http-service.url`); the
+   log's `Java VM arguments` line shows it
+2. Re-patch from the **original** jar so the version-check constant is replaced (3 `patched` lines)
+3. A client launched before a `jav_config.ws` change may have cached the old copy: close Microbot,
+   delete `OSRS-Microbot-Client\home\.runelite\cache\okhttp`, relaunch (only HTTP responses live
+   there)
+4. Relog after a server change: membership days are set at login
+5. Check the VM serves the files: `curl https://runescape-server.tail5475a4.ts.net/runelite/worlds.js`
+
+### Members items only offer "Use" (no Wield/Wear)
+The client strips the inventory options of members items when it thinks it is on a free-to-play
+world, and it does that once, when it first loads each item, so the stripped copy sticks for the
+rest of the session. Fully close Microbot and relaunch it with `Play-Microbot.bat` (after step 3
+above if `jav_config.ws` changed). A fresh client on the current setup was verified with the Scythe
+of vitur showing `Wield, Check, Uncharge, Drop`.
+
+### "Mismatch in overlaid cache archive hash for 12/89 / 12/920" in game chat
+Harmless. RuneLite ships replacement versions of a few client scripts (12/89 `rebuildpmbox`,
+12/920 `toplevel_resize_customise`) built for a slightly later rev 233 cache than the server's
+stock one, so it keeps the server's script and logs a warning. Microbot copies RuneLite warnings
+into game chat by default. To hide them: **Microbot plugin settings → Game chat logging →** turn on
+**"Show only Microbot plugin logs in game chat"** (or set the minimum level to `ERROR`, or turn
+game chat logging off).
+
+### "Nothing interesting happens" on a gate, door or object
+That's RsMod's reply for an object with no script. Doors and gates are covered by the generic
+pass-through (`[beanlab] generic pass-through registered for N unscripted doors/gates` at startup),
+except diagonal ones. Other objects (shortcuts, stiles, levers, most skilling objects) still aren't
+implemented upstream; it isn't a membership problem. Use `::teleports` to get past them.
+
+### Food or a potion says "Nothing interesting happens"
+Check the startup log for `[beanlab] consumables registered`. Items whose option isn't literally
+"Eat"/"Drink", or potions without a `(n)` dose suffix, aren't covered. Foods not in `FoodTable` heal 3;
+potions not in `PotionTable` are consumed with "no special effect".
 
 ### `patch-microbot.py` says "is not Microbot 2.0.20" or "constant not found"
 You passed the already-patched jar or a different version. Use the untouched download and check its
@@ -570,8 +767,9 @@ report the quest name.
 Start again from `/oauth/discord/start` in the same browser (the state cookie lasts 10 minutes and
 works once).
 
-### Discord bot offline
-It's disabled by default: `systemctl enable --now osrs-discord`, then `journalctl -u osrs-discord -n 20`.
+### Discord bot offline / `/register` doesn't appear
+`systemctl status osrs-discord` and `journalctl -u osrs-discord -n 30`. Look for `synced 2 slash
+commands`; if it says `cannot register slash commands`, re-invite the bot with the URL it logs.
 
 ### GE commands not working
 Restart after GE migrations (Flyway runs on boot) and check V7/V8 in `flyway_schema_history`. If

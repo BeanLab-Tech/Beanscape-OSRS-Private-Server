@@ -25,13 +25,20 @@ content/other/admin-potato/          rotten potato menu, ::teleports/::tp (Telep
 content/other/admin-api/             loopback HTTP API for the in-client admin console (AdminRouter
                                      holds every permission rule; GameBackend runs on the game
                                      thread via GameAccess), ::admintoken (owner), tests
+content/other/beanlab-smithing/      mining, smelting, smithing (data in SmithingData.kt)
+content/other/beanlab-skills/        prayer, firemaking, cooking (data in SkillsData.kt)
+content/other/beanlab-content/       generic door/gate pass-through (unimplemented-op slot),
+                                     eating/drinking (registered on GameLifecycle.Startup)
 content/other/grandexchange/         GE engine (GeBook), ::ge commands (GeCommands), tests
 content/other/commands/.../NameChangeCommands.kt   ::name
 web/                                 Discord registration + admin panel (FastAPI)
 discordbot/bot.py                    Discord bot (token read from /opt/osrs/config on the VM;
                                      never posts passwords in-channel)
-client/microbot/                     patch-microbot.py (Microbot 2.0.20 -> BeanLab: RSA modulus +
-                                     host allowlist) and Play-Microbot.bat
+client/microbot/                     patch-microbot.py (Microbot 2.0.20 -> BeanLab: RSA modulus,
+                                     host allowlist, version-check URL) and Play-Microbot.bat
+webconfig/                           www/ = /opt/osrs/config/webconfig on the VM (jav_config.ws,
+                                     world_list.ws, runelite/worlds.js + version + prices), served
+                                     no-cache by serve.py (osrs-webconfig); keep bytes exact
 scripts/build-overlay.sh             builds/tests the overlay on pinned upstream
 docs/                                session report, audit
 ```
