@@ -114,18 +114,22 @@ systemctl daemon-reload
 #    "(NEW CLIENT AVAILABLE)". Clients from before build numbers use /runelite/microbot-version.txt.
 build=$(tr -dc '0-9' < "$SRC/client/microbot/CLIENT_BUILD")
 [ -n "$build" ] || { log "client/microbot/CLIENT_BUILD is empty"; exit 1; }
+# The current client's real Microbot version (e.g. 2.6.65). Older builds report the next
+# version up so their title bar shows "(NEW CLIENT AVAILABLE)".
+curver=$(tr -dc '0-9.' < "$SRC/client/microbot/CLIENT_VERSION")
+[ -n "$curver" ] || curver="2.0.20"
 as_osrs sh -c '
     set -e
-    dir="$1/runelite/client"; build="$2"
+    dir="$1/runelite/client"; build="$2"; curver="$3"
     mkdir -p "$dir"
     n=1
     while [ "$n" -le "$build" ]; do
-        if [ "$n" = "$build" ]; then echo 2.0.20; else echo 2.0.21; fi > "$dir/$n.txt"
+        if [ "$n" = "$build" ]; then echo "$curver"; else echo "2.0.21"; fi > "$dir/$n.txt"
         n=$((n + 1))
     done
-    echo 2.0.21 > "$1/runelite/microbot-version.txt"
+    echo "2.0.21" > "$1/runelite/microbot-version.txt"
     echo "$build" > "$dir/CURRENT"
-' sh "$WEBCONFIG" "$build"
+' sh "$WEBCONFIG" "$build" "$curver"
 
 # 5. Full restart: stop the game (saves online players), install the new build, start everything.
 systemctl stop osrs-server
