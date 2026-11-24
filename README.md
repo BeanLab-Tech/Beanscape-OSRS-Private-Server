@@ -651,6 +651,9 @@ sudo tailscale serve --bg --set-path /adminapi http://127.0.0.1:8087
   a rank above their own; all writes land in `admin_audit` (refusals included).
 - **Switches:** `ADMIN_API_ENABLED=false` keeps the listener off; `ADMIN_API_PORT` changes the port.
 - **Deploying:** V12 runs on boot. Stop `osrs-server` before building, as for any overlay change.
+- **The client side:** the console is the Beanscape Admin plugin in `client/microbot/admin-plugin`.
+  Owners install it with `client\microbot\Install-AdminPlugin.ps1 -Token bsa_...` (see that folder's
+  README). It is side-loaded, so `Update-Client.ps1` leaves it alone.
 - Not yet tested on the live server: the game-side actions (teleport, summon, give, stats, kick).
 
 ### Backups

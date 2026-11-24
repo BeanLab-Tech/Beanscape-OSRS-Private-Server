@@ -36,6 +36,9 @@ discordbot/bot.py                    Discord bot (token read from /opt/osrs/conf
                                      never posts passwords in-channel)
 client/microbot/                     patch-microbot.py (Microbot 2.0.20 -> BeanLab: RSA modulus,
                                      host allowlist, version-check URL) and Play-Microbot.bat
+client/microbot/admin-plugin/        Beanscape Admin plugin (Java 11, Gradle wrapper): side-loaded
+                                     into home\.runelite\microbot-plugins; Install-AdminPlugin.ps1
+                                     builds and installs it. Talks to content/other/admin-api.
 deploy/                              VM auto-deploy: deploy-vm.sh (timer every 5 min, CI-green main
                                      only, build-then-restart), systemd units, install.sh
 webconfig/                           www/ = /opt/osrs/config/webconfig on the VM (jav_config.ws,
