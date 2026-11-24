@@ -45,6 +45,7 @@ fork) or RuneLite via RSProx, locked behind the tailnet.
 | Admin web panel | `web/admin_app.py` (`osrs-admin`) | `https://runescape-server.tail5475a4.ts.net/admin` |
 | Discord registration (`/register`, `/resetpassword`) | `discordbot/bot.py` (`osrs-discord`) | Slash commands, ephemeral replies, linked to Discord ID |
 | Generic doors & gates | `content/other/beanlab-content/GenericDoorsScript.kt` | ~900 unscripted doors/gates (incl. members gates) become passable |
+| Prayer, firemaking, cooking | `content/other/beanlab-skills/` | Bury/scatter, altars, light logs (fires + ashes), cook on fires/ranges |
 | Mining, smelting, smithing | `content/other/beanlab-smithing/` | 72 rock types, 41 furnaces, 17 anvils; menus for bars/items |
 | Eating & drinking | `content/other/beanlab-content/ConsumablesScript.kt` | Every Eat/Drink item: food heals, potions boost/restore, doses step down |
 | Microbot client patcher + launcher | `client/microbot/` | Microbot 2.0.20 = RuneLite 1.11.19 = rev 233 |
@@ -52,12 +53,12 @@ fork) or RuneLite via RSProx, locked behind the tailnet.
 
 ### Not yet implemented
 
-RsMod upstream content is thin (upstream has Lumbridge, cooking, fishing, woodcutting, combat
-spells, special attacks, banks, some generic NPCs/objects). Still missing, roughly by impact:
+RsMod upstream content is thin (upstream has Lumbridge, fishing, woodcutting, combat spells,
+special attacks, banks, some generic NPCs/objects; its cooking module is an empty placeholder). Still missing, roughly by impact:
 
-- **Skills:** firemaking, crafting, fletching, herblore, prayer (bones), agility,
-  thieving, runecrafting, slayer, hunter, farming, construction (cooking, fishing, woodcutting,
-  mining and smithing exist; quests are only marked complete by `::questsdone`)
+- **Skills:** crafting, fletching, herblore, agility,
+  thieving, runecrafting, slayer, hunter, farming, construction (fishing, woodcutting, mining,
+  smithing, prayer, firemaking and basic cooking exist; quests are only marked complete by `::questsdone`)
 - **Objects:** agility shortcuts, stiles, levers, most skilling objects, diagonal doors
 - **NPC content:** shops, most dialogue, boss mechanics (bosses spawn with stats only)
 - **Item effects:** poison/antipoison, special potions (divine, antifire, stamina's run-drain
@@ -333,6 +334,18 @@ change. Scripted boss mechanics are mostly not implemented upstream.
 
 ---
 
+### Prayer, firemaking & cooking (`content/other/beanlab-skills`)
+
+- **Prayer:** "Bury" bones (normal 4.5 XP up to superior dragon 150) or "Scatter" demonic ashes.
+  "Pray-at" any altar to restore your Prayer points.
+- **Firemaking:** use a tinderbox on logs (normal to redwood, OSRS levels/XP) to light a fire where
+  you stand; you step west. The fire burns 100-200 ticks, then leaves ashes. You can't light a fire
+  on top of another.
+- **Cooking:** use raw food on any fire (including ones you light) or range; pick an amount if you
+  have several. 26 foods from shrimps to manta ray; burn chance drops to zero at each food's
+  stop-burn level, ranges burn slightly less. Burnt food goes to its burnt item.
+- Data: `SkillsData.kt`. Startup logs `[beanlab] skills registered: ...`.
+
 ### Mining & smithing (`content/other/beanlab-smithing`)
 
 - **Mining:** click a rock (or ore vein) with a pickaxe in your inventory or hand. The best pickaxe
@@ -564,6 +577,9 @@ cd /opt/osrs/server/rsmod && git bundle create /opt/osrs/backups/osrs-server.bun
 ## Changelog
 
 ### 2026-11-24
+- **Prayer, firemaking, cooking:** bury 55 bone/ash types, pray at 44 altar types; tinderbox on 12
+  log types lights a real fire (ashes when it burns out); cook 26 raw foods on 120 fire/range types
+  with level-based burning. (Upstream's cooking module turned out to be empty.)
 - **Mining & smithing:** 72 rock types (ore rocks and veins, limestone, soft clay, amethyst) with
   pickaxe tiers, success rolls, depletion/respawn; smelting 8 bars at 41 furnace types (ore on
   furnace or "Smelt"); smithing 22 items per metal (bronze to rune) at 17 anvil types with a hammer.
