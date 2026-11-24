@@ -234,6 +234,10 @@ _DUMMY_HASH = None
 LOGIN_MAX_FAILURES_PER_IP = 5
 LOGIN_MAX_FAILURES_PER_USER = 20
 LOGIN_WINDOW_SECONDS = 900
+# The config admin is never hard-locked (that would let anyone lock it out), but once it has this
+# many failures in the window from any IPs, every further attempt on it waits CONFIG_ADMIN_DELAY.
+CONFIG_ADMIN_SLOWDOWN_AFTER = 10
+CONFIG_ADMIN_DELAY_SECONDS = 5
 _LOGIN_FAILURES: dict[str, list[float]] = {}
 # Each Argon2 verify uses 64 MB; cap how many run at once so login spam can't exhaust memory.
 _ARGON2_SLOTS = None
@@ -315,9 +319,21 @@ async def login_submit(request: Request) -> RedirectResponse:
     password = str(form.get("password", ""))
     source = request.client.host if request.client else "?"
     limits = {f"ip:{source}": LOGIN_MAX_FAILURES_PER_IP}
-    if username.strip().lower() != CFG.admin_username.strip().lower():
+    # Only the exact config username is exempt from the per-username limit; case or whitespace
+    # variants (and any game account with a similar name) are limited like everyone else.
+    is_config_admin_name = hmac.compare_digest(username, CFG.admin_username)
+    if not is_config_admin_name:
         limits[f"user:{username.strip().lower()}"] = LOGIN_MAX_FAILURES_PER_USER
     now = time.time()
+    if is_config_admin_name:
+        # Global slowdown instead of a lock: failures on the config admin from any IPs count here.
+        if len(_recent_failures("config-admin", now)) >= CONFIG_ADMIN_SLOWDOWN_AFTER:
+            import asyncio
+
+            log.warning("admin panel config-admin login slowed (%ss) for %s", CONFIG_ADMIN_DELAY_SECONDS, source)
+            await asyncio.sleep(CONFIG_ADMIN_DELAY_SECONDS)
+            now = time.time()
+        limits["config-admin"] = 10**9  # counted, never blocks
     if any(len(_recent_failures(k, now)) >= limit for k, limit in limits.items()):
         log.warning("admin panel login locked out for %r from %s", username, source)
         return RedirectResponse("/admin/login?error=Too+many+attempts,+try+again+later", status_code=302)
@@ -336,8 +352,15 @@ async def login_submit(request: Request) -> RedirectResponse:
         if ok:
             username, game_account = username.strip().lower(), True
     if ok:
+        # Undo only this attempt's reservation. Earlier failures from this IP (possibly against
+        # other accounts) and the config-admin slowdown count stay, so a valid login can't be used
+        # to reset the limits. Only the signed-in game account's own username counter is cleared.
         for k in keys:
-            _LOGIN_FAILURES.pop(k, None)
+            entries = _LOGIN_FAILURES.get(k, [])
+            if now in entries:
+                entries.remove(now)
+        if game_account:
+            _LOGIN_FAILURES.pop(f"user:{username}", None)
         log.info("admin panel login: %s from %s", username, source)
         token = make_session(username, game_account)
         resp = RedirectResponse("/admin/", status_code=302)

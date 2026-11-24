@@ -230,9 +230,12 @@ Safeguards:
 - **Live re-check.** Game-account sessions are re-checked on every page; demoting, banning,
   deleting or unlisting the account ends the session immediately. Logout deletes the session.
 - **Lockout.** Within 15 minutes, 5 failures from one device (its tailnet IP) or 20 failures for one
-  game username block further attempts ("Too many attempts"). The config admin login is only
-  limited per device, so nobody can lock it out by spamming its name. Each attempt is counted before
-  the password check, so simultaneous attempts can't slip past the limit. Failures all take the same
+  game username block further attempts ("Too many attempts"). The config admin login is never
+  locked by name (so nobody can lock you out by spamming it); instead, after 10 failures on it in
+  15 minutes from any devices, every further attempt on it waits 5 seconds. Only the exact config
+  username gets that treatment; case or spacing variants are limited like game usernames. Each
+  attempt is counted before the password check, so simultaneous attempts can't slip past the limit,
+  and a successful login doesn't reset a device's earlier failures. Failures all take the same
   time (a dummy Argon2 check runs for unknown or ineligible users), and at most 2 Argon2 checks run
   at once. A restart of `osrs-admin` clears all counters.
 - Logins, failures, lockouts and revocations are logged:
