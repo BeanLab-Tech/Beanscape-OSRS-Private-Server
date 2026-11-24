@@ -5,8 +5,14 @@
 # the repo secret CLAUDE_CODE_OAUTH_TOKEN (run `claude setup-token` locally; Pro/Max subscription).
 # To use an API key instead, add ANTHROPIC_API_KEY and swap the two auth lines below.
 #
-# Note: Claude can't reach VM 123 from a runner; it works on the overlay and runs
-# scripts/build-overlay.sh like CI does (see CLAUDE.md / AGENTS.md).
+# Trust model (this repo is public):
+# - TRUSTED users (people with write access) are listed twice below: in the job `if` and in
+#   include_comments_by_actor. Keep both lists in sync when adding or removing people.
+# - Claude runs only when the person mentioning @claude AND the issue/PR author are TRUSTED, and only
+#   on PRs whose branch is in this repo (not a fork).
+# - Claude only sees comments from TRUSTED users (plus its own), so outsiders' text can't steer it.
+# - No code execution: Bash is limited to fixed read-only git commands. CI (ci.yml, read-only,
+#   no secrets) builds and tests every PR Claude opens.
 name: Claude Code
 
 on:
@@ -21,26 +27,20 @@ on:
 
 jobs:
   claude:
-    # This repo is public, so Claude only runs when BOTH the person mentioning @claude AND the
-    # author of the issue/PR it would read have write access (owner, org member or collaborator).
-    # That keeps outsiders' text (possible prompt injection) away from a job holding a write token
-    # and the Claude secret. PR review triggers must also come from a branch in this repo, not a fork.
     if: |
+      contains(fromJSON('["chad-fiaschetti", "jsilva7674-cmd"]'), github.actor) &&
       (
         (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude') &&
-          contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
-          contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association)) ||
+          contains(fromJSON('["chad-fiaschetti", "jsilva7674-cmd"]'), github.event.issue.user.login)) ||
         (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude') &&
-          contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
-          contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association) &&
+          contains(fromJSON('["chad-fiaschetti", "jsilva7674-cmd"]'), github.event.pull_request.user.login) &&
           github.event.pull_request.head.repo.full_name == github.repository) ||
         (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude') &&
-          contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.review.author_association) &&
-          contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association) &&
+          contains(fromJSON('["chad-fiaschetti", "jsilva7674-cmd"]'), github.event.pull_request.user.login) &&
           github.event.pull_request.head.repo.full_name == github.repository) ||
         (github.event_name == 'issues' &&
           (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')) &&
-          contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association))
+          contains(fromJSON('["chad-fiaschetti", "jsilva7674-cmd"]'), github.event.issue.user.login))
       )
     runs-on: ubuntu-latest
     permissions:
@@ -50,10 +50,24 @@ jobs:
       id-token: write # required: the action trades the OIDC token for a short-lived Claude app token
       actions: read # lets Claude read CI results on PRs
     steps:
+      # issue_comment events on PRs don't carry the head repo, so resolve it before doing anything.
+      - name: Refuse PRs from forks
+        if: github.event_name == 'issue_comment' && github.event.issue.pull_request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.issue.pull_request.url }}
+        run: |
+          head_repo=$(gh api "$PR_URL" --jq '.head.repo.full_name // ""')
+          if [ "$head_repo" != "$GITHUB_REPOSITORY" ]; then
+            echo "::error::PR head is '$head_repo', not this repo; Claude does not run on fork PRs."
+            exit 1
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 1
+          persist-credentials: false # don't leave the workflow token in .git/config
 
       - name: Run Claude Code
         id: claude
@@ -61,8 +75,14 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          # Bash is limited to the overlay build and read-only git; anything else is denied (no one
-          # can approve it in a runner). Edits go through Claude's file tools inside the checkout.
+          # Only trusted people's comments (and Claude's own) reach the prompt.
+          include_comments_by_actor: "chad-fiaschetti,jsilva7674-cmd,claude[bot]"
+          # Commits go through the GitHub API (signed, shown as Verified) instead of `git push`,
+          # which is denied below.
+          use_commit_signing: "true"
+          # Fixed read-only git commands only; anything else is denied (nobody can approve in a
+          # runner). No build/test scripts: Claude can edit files, so running repo scripts would
+          # let it run arbitrary code. Edits and commits go through the action's own tools.
           claude_args: |
-            --allowedTools "Bash(scripts/build-overlay.sh:*),Bash(git status),Bash(git diff:*),Bash(git log:*)"
+            --allowedTools "Bash(git status),Bash(git diff),Bash(git diff --stat),Bash(git log --oneline -20)"
             --disallowedTools "Bash(git push:*)"

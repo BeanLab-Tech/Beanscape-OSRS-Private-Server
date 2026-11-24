@@ -381,8 +381,18 @@ UPDATE accounts SET modlevel = 'admin' WHERE login_username = 'theirusername';
 ### Claude on GitHub
 
 `.github/workflows/claude.yml` runs [Claude Code](https://github.com/anthropics/claude-code-action)
-when an org member or collaborator mentions `@claude` in an issue, PR comment or review (other
-commenters are ignored, since the repo is public). One-time setup:
+when a **trusted user** mentions `@claude` in an issue, PR comment or review. Because the repo is
+public, it is locked down:
+
+- **Trusted users** are listed in `claude.yml` (currently `chad-fiaschetti`, `jsilva7674-cmd`), in
+  two places: the job `if` and `include_comments_by_actor`. Edit both to add or remove someone.
+- Claude runs only if both the person mentioning it and the issue/PR author are trusted, never on
+  fork PRs, and only reads trusted users' comments.
+- Claude can edit files and commit (signed, via the GitHub API) and open PRs, but its shell is
+  limited to read-only `git status/diff/log`; it doesn't run repo scripts. CI builds its PRs.
+- Actions are pinned to commit SHAs; Dependabot opens weekly PRs to update them.
+
+One-time setup:
 
 1. Install the Claude GitHub app: https://github.com/apps/claude → **Install** → `BeanLab-Tech` →
    **Only select repositories** → `Beanscape-OSRS-Private-Server`
@@ -393,8 +403,9 @@ commenters are ignored, since the repo is public). One-time setup:
    ```
 
 Alternatively run `claude` in a terminal inside a clone and use `/install-github-app`, which does all
-three. Claude in a runner can't reach VM 123; it works on the overlay and `scripts/build-overlay.sh`.
-CI (`ci.yml`) also has a manual **Run workflow** button (`workflow_dispatch`).
+three, but it writes its own default workflow: keep this repo's locked-down `claude.yml` instead.
+Claude in a runner can't reach VM 123; it works on the overlay only. CI (`ci.yml`) also has a manual
+**Run workflow** button (`workflow_dispatch`).
 
 ### Adding Content
 
