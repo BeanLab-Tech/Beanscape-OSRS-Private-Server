@@ -37,6 +37,11 @@ constructor(private val modLevelTypes: ModLevelTypeList) :
         player.xpRate = data.xpRate
         player.lastLogin = LocalDateTime.now()
         player.vars.backing.putAll(data.varps)
+        // BeanLab: also report membership days remaining (varp 1780 account_credit), which Jagex
+        // sends and RsMod never sets. Clients and plugins that check it (e.g. Microbot's
+        // Rs2Player.isMember: account_credit > 0) otherwise treat every account as free-to-play.
+        // Set after the saved varps so a stale saved value cannot override it.
+        player.vars.backing[ACCOUNT_CREDIT_VARP] = MEMBERSHIP_DAYS
         player.assignModLevel(data.modLevel)
     }
 
@@ -50,3 +55,9 @@ constructor(private val modLevelTypes: ModLevelTypeList) :
         modLevel = match ?: modLevelTypes.default()
     }
 }
+
+/** Varp 1780 `account_credit`: membership days remaining, shown in the account tab. */
+private const val ACCOUNT_CREDIT_VARP = 1780
+
+/** Reported membership length for every account (10 years). */
+private const val MEMBERSHIP_DAYS = 3650

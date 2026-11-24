@@ -45,6 +45,7 @@ fork) or RuneLite via RSProx, locked behind the tailnet.
 | Admin web panel | `web/admin_app.py` (`osrs-admin`) | `https://runescape-server.tail5475a4.ts.net/admin` |
 | Discord `!register` bot | `discordbot/bot.py` (`osrs-discord`, disabled by default) | Password only ever sent by DM |
 | Microbot client patcher + launcher | `client/microbot/` | Microbot 2.0.20 = RuneLite 1.11.19 = rev 233 |
+| Client webconfig | `webconfig/` (`osrs-webconfig`) | `jav_config.ws`, `world_list.ws`, RuneLite `worlds.js`, version file; served no-cache |
 
 ---
 
@@ -126,15 +127,22 @@ python client\microbot\patch-microbot.py `
   d6ac773e2baf663e78d82337e3f1e4ccd46e2b4b4235e6be93f11bbb445a3c7a3a01f1dac3feee2a0e14740cda715ec18f6d746e67ef7a50e876041f6ac3db95abbf8b6ce9973cc05d134d4afa35d749831fb2073f42644360d6da342d62f95479c2be2650cade3aeba76e73a05495fe8f6bb871dcb2e657b34e20b0ed94bf13
 ```
 
-Expected output: `patched bc.class`, `patched bl.class`, `wrote ...`. What it changes:
+Expected output: three `patched ...` lines, then `wrote ...`. What it changes:
 
 | Class | Constant | Change |
 |-------|----------|--------|
 | `bc.class` | RSA login modulus | Jagex's key → the BeanLab server key (the modulus above, same as in `proxy-targets.yaml`) |
 | `bl.class` | host allowlist entry `127.0.0.1` | `""`, so the client accepts the BeanLab host (same trick RSProx uses) |
+| `MicrobotVersionChecker.class` | `https://microbot.cloud/api/version/client` | `<server>/runelite/microbot-version.txt`, which says `2.0.20`, so the client stops marking itself "NEW CLIENT AVAILABLE" |
 
 Everything else is copied byte for byte; the game port stays 43594. If the server's RSA key ever
-changes, re-run this step with the new modulus against the **original** jar.
+changes, re-run this step with the new modulus against the **original** jar. An optional 4th
+argument sets the server base URL (default `https://runescape-server.tail5475a4.ts.net`).
+
+> **Why not the latest Microbot?** Each Microbot release bundles the game client for one OSRS
+> revision. The newest (2.6.x, RuneLite 1.13.x) targets a much newer revision than rev 233, and
+> RsMod upstream has no newer revision to move to, so 2.0.20 is the newest Microbot that can log in.
+> The version file tells the client that 2.0.20 is current *for this server*.
 
 ### Step 4 — Install the launcher
 
@@ -142,12 +150,18 @@ changes, re-run this step with the new modulus against the **original** jar.
 copy client\microbot\Play-Microbot.bat "$env:USERPROFILE\Desktop\OSRS-Microbot-Client\"
 ```
 
-`Play-Microbot.bat` runs the patched jar with
-`--jav_config=https://runescape-server.tail5475a4.ts.net/jav_config.ws`, and sets
-`-Duser.home=.\home` so Microbot's profile, plugins, logs and cache live in
-`OSRS-Microbot-Client\home\` and never touch a normal RuneLite install (or your live account's
-settings). It looks for Temurin 21 under `C:\Program Files\Eclipse Adoptium\`; edit `JAVAW` if
-yours is elsewhere.
+`Play-Microbot.bat` runs the patched jar with:
+
+- `--jav_config=<server>/jav_config.ws`: game server address, world 1, members world flags
+- `-Drunelite.http-service.url=<server>/runelite`: RuneLite's API base. RuneLite (and Microbot's
+  `Rs2Player.isInMemberWorld()`) get the world list from `<base>/worlds.js`; the server publishes
+  world 1 as `MEMBERS`. Without this they ask `api.runelite.net`, which no longer serves 1.11.19.
+- `-Duser.home=.\home`: Microbot's profile, plugins, logs and cache live in
+  `OSRS-Microbot-Client\home\` and never touch a normal RuneLite install (or your live account's
+  settings)
+
+It looks for Temurin 21 under `C:\Program Files\Eclipse Adoptium\`; edit `JAVAW` if yours is
+elsewhere. `SERVER` at the top sets the server URL.
 
 ### Step 5 — Register and log in
 
@@ -155,10 +169,11 @@ yours is elsewhere.
 2. Double-click `Play-Microbot.bat`. First launch downloads the game cache from the server (~1 min)
 3. **Existing user** → username + password → **Login**
 
-**When Microbot says "New Microbot client version available": ignore it.** Updating breaks the
-connection (see above). Expect a few harmless log warnings: RuneLite's price/world lookups against
-`api.runelite.net` 404 for this old version (the in-game world list comes from the server), and
-some bundled Microbot plugins (e.g. Quest Helper) expect live-game data RsMod doesn't implement.
+4. Check membership: the **Account** tab shows 3650 days of membership, and Microbot scripts treat
+   the account and world as members (see [Membership](#membership))
+
+**Never update Microbot past 2.0.20**, even if something offers it (see Step 3). Some bundled
+Microbot plugins (e.g. Quest Helper) expect live-game data RsMod doesn't implement and log errors.
 
 ---
 
@@ -230,10 +245,19 @@ To run the bot: `systemctl enable --now osrs-discord` (token file: `/opt/osrs/co
 - Everyone can use `::name` and `::ge`; admin tools need a mod level (see below)
 
 ### Membership
-`CharacterAccountApplier` forces `player.members = true` at login, because accounts are created by
-four paths (game server, web, admin panel, Discord bot) that all default `members` to 0. Migration
-V11 set the column to 1 for existing accounts so the DB and admin panel agree. World 1 is already
-flagged members in `world_list.ws`.
+Every account is a member on a members world. That takes five settings, because the game, the
+client and Microbot each check membership differently:
+
+| Check | Reads | Set by |
+|-------|-------|--------|
+| Server + login response `member` | `player.members` | `CharacterAccountApplier` forces `true` at login (the four account-creation paths default `members` to 0); V11 set the DB column to 1 |
+| Membership days (Account tab, Microbot `Rs2Player.isMember()`) | varp 1780 `account_credit` > 0 | `CharacterAccountApplier` sets 3650 at login, after saved varps load |
+| Client world type (`client.getWorldType()`) | `jav_config.ws` `param=5` (bitmask, 1 = members) | `webconfig/www/jav_config.ws` |
+| Client world number (`client.getWorld()`) | `jav_config.ws` `param=12` | `1`, matching `world_list.ws` (was `255`, which broke the next check) |
+| Microbot `Rs2Player.isInMemberWorld()` | RuneLite world list: world with `client.getWorld()`'s id has `MEMBERS` | `webconfig/www/runelite/worlds.js` + the launcher's `-Drunelite.http-service.url` |
+
+Without the last three, Microbot scripts treat the account as free-to-play (members areas,
+teleports and items skipped) even though the server allows everything.
 
 ### Controls
 Standard OSRS controls; RuneLite/Microbot plugins work. **ESC** toggles the sidebar; **F1–F6** open
@@ -336,6 +360,13 @@ journalctl -u osrs-server -f      # wait for "Bound to ports: 43594"; Flyway mig
 > its shutdown hook then fails (`NoClassDefFoundError`) and online players lose progress since the
 > last autosave.
 
+Client webconfig: copy `webconfig/www/*` to `/opt/osrs/config/webconfig/` (keep `jav_config.ws`'s
+CRLF line endings; `.gitattributes` stores these files byte for byte) and `webconfig/serve.py` to
+`/opt/osrs/config/webconfig-serve.py`, install `webconfig/systemd/osrs-webconfig-no-cache.conf` as
+`/etc/systemd/system/osrs-webconfig.service.d/no-cache.conf`, then
+`systemctl daemon-reload && systemctl restart osrs-webconfig`. No game-server restart is needed,
+but clients only pick up a changed `jav_config.ws` on their next launch.
+
 Web and bot code: copy `web/*.py` + `web/admin_templates/` to `/opt/osrs/web/` and
 `discordbot/bot.py` to `/opt/osrs/discordbot/`, then `systemctl restart osrs-web osrs-admin`
 (and `osrs-discord` if enabled). Secrets are not in this repo: `web/config.json` (see
@@ -350,7 +381,7 @@ Web and bot code: copy `web/*.py` + `web/admin_templates/` to `/opt/osrs/web/` a
 | Unit | Purpose | State |
 |------|---------|-------|
 | `osrs-server.service` | RsMod game server (:43594) | enabled |
-| `osrs-webconfig.service` | `jav_config.ws` + `world_list.ws` (python http.server :8080) | enabled |
+| `osrs-webconfig.service` | Client webconfig (`webconfig-serve.py`, no-cache, :8080, `/`) | enabled |
 | `osrs-web.service` | Discord OAuth registration (:8085, `/oauth`) | enabled |
 | `osrs-admin.service` | Admin panel (:8086, `/admin`) | enabled |
 | `osrs-discord.service` | `!register` bot | **disabled** |
@@ -466,6 +497,15 @@ cd /opt/osrs/server/rsmod && git bundle create /opt/osrs/backups/osrs-server.bun
   versioned in `discordbot/`.
 - **Web registration:** CSRF-safe OAuth state, HTML escaping, no-store; restyled landing page.
 - **Ops:** documented stop-before-build; `ktfmt` applied to the admin-potato module.
+- **Membership in Microbot:** membership days (varp 1780) set at login; `jav_config.ws` world
+  number fixed (255 → 1); RuneLite world list (`runelite/worlds.js`) served from the VM and wired
+  in with `-Drunelite.http-service.url`. Microbot's `isMember()`/`isInMemberWorld()` now return true.
+- **Microbot "out of date":** version check points at the server (`microbot-version.txt` = 2.0.20,
+  the newest Microbot on rev 233); `prices.js` served empty to stop 404s.
+- **Webconfig:** now versioned in `webconfig/` and served with `Cache-Control: no-cache` (clients
+  had cached a stale `jav_config.ws` for days).
+- **Repo:** moved to `BeanLab-Tech`; Claude Code workflow (trusted users only, SHA-pinned);
+  Dependabot for actions; CI `workflow_dispatch`.
 
 ### 2026-10-28 / 29
 Grand Exchange, `::name`, Discord registration, realm hardening (V9) — see
@@ -521,6 +561,16 @@ Full reasoning in [`docs/AUDIT_2026-10-29.md`](docs/AUDIT_2026-10-29.md) §6.
 2. Did you accept a Microbot update? Re-patch from `original\microbot-2.0.20.jar` (only 2.0.20 works)
 3. Did the server key change? Re-run `patch-microbot.py` with the new modulus
 4. Check `OSRS-Microbot-Client\home\.runelite\logs\client.log`
+
+### Microbot scripts act free-to-play / still say "NEW CLIENT AVAILABLE"
+1. Launch with the current `Play-Microbot.bat` (it must pass `-Drunelite.http-service.url`); the
+   log's `Java VM arguments` line shows it
+2. Re-patch from the **original** jar so the version-check constant is replaced (3 `patched` lines)
+3. A client launched before a `jav_config.ws` change may have cached the old copy: close Microbot,
+   delete `OSRS-Microbot-Client\home\.runelite\cache\okhttp`, relaunch (only HTTP responses live
+   there)
+4. Relog after a server change: membership days are set at login
+5. Check the VM serves the files: `curl https://runescape-server.tail5475a4.ts.net/runelite/worlds.js`
 
 ### `patch-microbot.py` says "is not Microbot 2.0.20" or "constant not found"
 You passed the already-patched jar or a different version. Use the untouched download and check its

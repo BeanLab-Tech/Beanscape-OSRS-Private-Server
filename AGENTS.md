@@ -26,8 +26,11 @@ content/other/commands/.../NameChangeCommands.kt   ::name
 web/                                 Discord registration + admin panel (FastAPI)
 discordbot/bot.py                    Discord bot (token read from /opt/osrs/config on the VM;
                                      never posts passwords in-channel)
-client/microbot/                     patch-microbot.py (Microbot 2.0.20 -> BeanLab: RSA modulus +
-                                     host allowlist) and Play-Microbot.bat
+client/microbot/                     patch-microbot.py (Microbot 2.0.20 -> BeanLab: RSA modulus,
+                                     host allowlist, version-check URL) and Play-Microbot.bat
+webconfig/                           www/ = /opt/osrs/config/webconfig on the VM (jav_config.ws,
+                                     world_list.ws, runelite/worlds.js + version + prices), served
+                                     no-cache by serve.py (osrs-webconfig); keep bytes exact
 scripts/build-overlay.sh             builds/tests the overlay on pinned upstream
 docs/                                session report, audit
 ```
