@@ -572,6 +572,25 @@ Full reasoning in [`docs/AUDIT_2026-10-29.md`](docs/AUDIT_2026-10-29.md) §6.
 4. Relog after a server change: membership days are set at login
 5. Check the VM serves the files: `curl https://runescape-server.tail5475a4.ts.net/runelite/worlds.js`
 
+### Members items only offer "Use" (no Wield/Wear)
+The client strips the inventory options of members items when it thinks it is on a free-to-play
+world, and it does that once, when it first loads each item, so the stripped copy sticks for the
+rest of the session. Fully close Microbot and relaunch it with `Play-Microbot.bat` (after step 3
+above if `jav_config.ws` changed). A fresh client on the current setup was verified with the Scythe
+of vitur showing `Wield, Check, Uncharge, Drop`.
+
+### "Mismatch in overlaid cache archive hash for 12/89 / 12/920" in game chat
+Harmless. RuneLite ships replacement versions of a few client scripts (12/89 `rebuildpmbox`,
+12/920 `toplevel_resize_customise`) built for a slightly later rev 233 cache than the server's
+stock one, so it keeps the server's script and logs a warning. Microbot copies RuneLite warnings
+into game chat by default. To hide them: **Microbot plugin settings → Game chat logging →** turn on
+**"Show only Microbot plugin logs in game chat"** (or set the minimum level to `ERROR`, or turn
+game chat logging off).
+
+### "Nothing interesting happens" on a gate, door or object
+That's RsMod's reply for an object with no script. Many members gates, doors and shortcuts aren't
+implemented upstream yet; it isn't a membership problem. Use `::teleports` to get past them.
+
 ### `patch-microbot.py` says "is not Microbot 2.0.20" or "constant not found"
 You passed the already-patched jar or a different version. Use the untouched download and check its
 SHA-256 (Step 2).
