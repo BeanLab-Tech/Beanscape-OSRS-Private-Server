@@ -229,9 +229,12 @@ Safeguards:
   lives on the VM.
 - **Live re-check.** Game-account sessions are re-checked on every page; demoting, banning,
   deleting or unlisting the account ends the session immediately. Logout deletes the session.
-- **Lockout.** 5 failures within 15 minutes per IP or per username blocks further attempts
-  ("Too many attempts"). Failures all take the same time (a dummy Argon2 check runs for unknown or
-  ineligible users), and at most 2 Argon2 checks run at once.
+- **Lockout.** Within 15 minutes, 5 failures from one device (its tailnet IP) or 20 failures for one
+  game username block further attempts ("Too many attempts"). The config admin login is only
+  limited per device, so nobody can lock it out by spamming its name. Each attempt is counted before
+  the password check, so simultaneous attempts can't slip past the limit. Failures all take the same
+  time (a dummy Argon2 check runs for unknown or ineligible users), and at most 2 Argon2 checks run
+  at once. A restart of `osrs-admin` clears all counters.
 - Logins, failures, lockouts and revocations are logged:
   `journalctl -u osrs-admin | grep "admin panel"`.
 

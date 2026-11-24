@@ -228,8 +228,11 @@ PANEL_MODLEVELS = ("owner",)
 
 _PANEL_HASHER = None
 _DUMMY_HASH = None
-# Lockout: this many failures per IP or per username within the window blocks further attempts.
-LOGIN_MAX_FAILURES = 5
+# Lockout within the window: per client IP (the real tailnet address; tailscale serve forwards it)
+# and, more loosely, per game username. The config admin is only limited per IP, so nobody can lock
+# it out by spamming its username.
+LOGIN_MAX_FAILURES_PER_IP = 5
+LOGIN_MAX_FAILURES_PER_USER = 20
 LOGIN_WINDOW_SECONDS = 900
 _LOGIN_FAILURES: dict[str, list[float]] = {}
 # Each Argon2 verify uses 64 MB; cap how many run at once so login spam can't exhaust memory.
@@ -311,11 +314,18 @@ async def login_submit(request: Request) -> RedirectResponse:
     username = str(form.get("username", ""))
     password = str(form.get("password", ""))
     source = request.client.host if request.client else "?"
-    keys = (f"ip:{source}", f"user:{username.strip().lower()}")
+    limits = {f"ip:{source}": LOGIN_MAX_FAILURES_PER_IP}
+    if username.strip().lower() != CFG.admin_username.strip().lower():
+        limits[f"user:{username.strip().lower()}"] = LOGIN_MAX_FAILURES_PER_USER
     now = time.time()
-    if any(len(_recent_failures(k, now)) >= LOGIN_MAX_FAILURES for k in keys):
+    if any(len(_recent_failures(k, now)) >= limit for k, limit in limits.items()):
         log.warning("admin panel login locked out for %r from %s", username, source)
         return RedirectResponse("/admin/login?error=Too+many+attempts,+try+again+later", status_code=302)
+    # Count this attempt now, before any await, so concurrent requests can't all pass the check
+    # above while their failures are still pending. A success clears the counts below.
+    for k in limits:
+        _LOGIN_FAILURES.setdefault(k, []).append(now)
+    keys = tuple(limits)
 
     game_account = False
     ok = hmac.compare_digest(username, CFG.admin_username) and hmac.compare_digest(password, CFG.admin_password)
@@ -333,8 +343,6 @@ async def login_submit(request: Request) -> RedirectResponse:
         resp = RedirectResponse("/admin/", status_code=302)
         resp.set_cookie("admin_session", token, httponly=True, samesite="strict", max_age=43200)
         return resp
-    for k in keys:
-        _LOGIN_FAILURES.setdefault(k, []).append(now)
     log.warning("admin panel login failed for %r from %s", username, source)
     return RedirectResponse("/admin/login?error=Invalid+credentials", status_code=302)
 
