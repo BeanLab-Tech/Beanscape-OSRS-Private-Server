@@ -27,6 +27,10 @@ SERVICES_AFTER_GAME="osrs-webconfig osrs-web osrs-admin osrs-discord"
 FORCE=${1:-}
 
 log() { echo "[deploy] $*"; }
+# Anything that touches code from the repo or osrs-owned paths runs as the game's service user, so
+# a merged commit can do no more than the running game server already can, and root never writes
+# through a path that osrs could have swapped for a symlink.
+as_osrs() { runuser -u osrs -- env HOME=/opt/osrs GRADLE_USER_HOME=/opt/osrs/.gradle "$@"; }
 mkdir -p "$BASE"
 exec 9>"$BASE/.lock"
 flock -n 9 || { log "another deploy is running"; exit 0; }
@@ -72,8 +76,9 @@ log "deploying ${current:0:7} -> ${target:0:7}"
 
 # 1. Build next to the running server. Sources change, the installed jars don't, so the running
 #    game is unaffected; if compilation fails we stop here and the game keeps running.
-rsync -a "$SRC/api" "$SRC/content" "$RSMOD/"
-if ! (cd "$RSMOD" && ./gradlew compileKotlin -q > "$BASE/build.log" 2>&1); then
+chown -R osrs:osrs "$RSMOD"   # -R does not follow symlinks; one-time for older root-built trees
+as_osrs rsync -a "$SRC/api" "$SRC/content" "$RSMOD/"
+if ! (cd "$RSMOD" && as_osrs ./gradlew compileKotlin -q > "$BASE/build.log" 2>&1); then
     grep -E '^e:|What went wrong' -A3 "$BASE/build.log" | head -20 || true
     log "BUILD FAILED for ${target:0:7} (full log: $BASE/build.log); game left running on ${current:0:7}"
     echo "$target" > "$BASE/failed-sha"
@@ -92,8 +97,8 @@ rsync -a --exclude 'config.json' --exclude 'env' --exclude 'admin_config.json' \
 if echo "$changed" | grep -q '^web/requirements.txt'; then
     "$WEB/venv/bin/pip" install -q -r "$WEB/requirements.txt"
 fi
-install -o osrs -g osrs -m 644 "$SRC/discordbot/bot.py" "$BOT/bot.py"
-rsync -a "$SRC/webconfig/www/" "$WEBCONFIG/"
+as_osrs install -m 644 "$SRC/discordbot/bot.py" "$BOT/bot.py"
+as_osrs rsync -a "$SRC/webconfig/www/" "$WEBCONFIG/"
 install -m 755 "$SRC/webconfig/serve.py" /opt/osrs/config/webconfig-serve.py
 mkdir -p /etc/systemd/system/osrs-webconfig.service.d /etc/systemd/system/osrs-server.service.d
 install -m 644 "$SRC/webconfig/systemd/osrs-webconfig-no-cache.conf" \
@@ -107,17 +112,23 @@ systemctl daemon-reload
 #    current build answers 2.0.20 (up to date); older builds answer 2.0.21, so Microbot shows
 #    "(NEW CLIENT AVAILABLE)". Clients from before build numbers use /runelite/microbot-version.txt.
 build=$(tr -dc '0-9' < "$SRC/client/microbot/CLIENT_BUILD")
-mkdir -p "$WEBCONFIG/runelite/client"
-for n in $(seq 1 "$build"); do
-    if [ "$n" = "$build" ]; then echo 2.0.20; else echo 2.0.21; fi > "$WEBCONFIG/runelite/client/$n.txt"
-done
-echo 2.0.21 > "$WEBCONFIG/runelite/microbot-version.txt"
-echo "$build" > "$WEBCONFIG/runelite/client/CURRENT"
-chown -R osrs:osrs "$WEBCONFIG"
+[ -n "$build" ] || { log "client/microbot/CLIENT_BUILD is empty"; exit 1; }
+as_osrs sh -c '
+    set -e
+    dir="$1/runelite/client"; build="$2"
+    mkdir -p "$dir"
+    n=1
+    while [ "$n" -le "$build" ]; do
+        if [ "$n" = "$build" ]; then echo 2.0.20; else echo 2.0.21; fi > "$dir/$n.txt"
+        n=$((n + 1))
+    done
+    echo 2.0.21 > "$1/runelite/microbot-version.txt"
+    echo "$build" > "$dir/CURRENT"
+' sh "$WEBCONFIG" "$build"
 
 # 5. Full restart: stop the game (saves online players), install the new build, start everything.
 systemctl stop osrs-server
-if ! (cd "$RSMOD" && ./gradlew :server:app:installDist --offline -q > "$BASE/install.log" 2>&1); then
+if ! (cd "$RSMOD" && as_osrs ./gradlew :server:app:installDist --offline -q > "$BASE/install.log" 2>&1); then
     log "INSTALL FAILED for ${target:0:7} (log: $BASE/install.log); starting whatever is installed"
     echo "$target" > "$BASE/failed-sha"
     systemctl start osrs-server
