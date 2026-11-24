@@ -9,7 +9,8 @@ Discord itself authenticates whoever runs a slash command, so the bot gets the u
 Discord ID without a browser OAuth round trip. Each Discord account can own one game account
 (unique accounts.discord_id, shared with the web OAuth registration). Replies are ephemeral: only
 the person who ran the command sees them, so passwords never appear in the channel and DMs don't
-need to be open.
+need to be open. The bot also keeps one pinned message in the registration channel with Register
+and Reset password buttons (Register opens a short form for the login name).
 
 Accounts use Argon2i with the game server's parameters; the game completes character creation on
 first login. The old `!register` text command now just points to /register (and deletes any message
@@ -204,11 +205,8 @@ CONNECT_HINT = (
 )
 
 
-@tree.command(name="register", description="Create your BeanLab OSRS account (only you see the reply)")
-@app_commands.describe(
-    username="Login name: 2-12 lowercase letters, numbers, spaces or _. Defaults to your Discord name."
-)
-async def register_cmd(interaction: discord.Interaction, username: str | None = None):
+async def do_register(interaction: discord.Interaction, username: str | None) -> None:
+    """Shared by /register and the Register button's form. Replies are ephemeral."""
     if not await guard(interaction):
         return
     await interaction.response.defer(ephemeral=True, thinking=True)
@@ -227,17 +225,18 @@ async def register_cmd(interaction: discord.Interaction, username: str | None = 
     elif result.startswith("linked:"):
         await interaction.followup.send(
             f"Your Discord account is already linked to `{result.split(':', 1)[1]}`. "
-            "Lost the password? Use `/resetpassword`.",
+            "Lost the password? Use **Reset password** or `/resetpassword`.",
             ephemeral=True,
         )
     elif result == "taken":
         await interaction.followup.send(
-            f"`{name}` is already taken. Run `/register username:<another name>`.", ephemeral=True
+            f"`{name}` is already taken. Press **Register** again and pick another login name.",
+            ephemeral=True,
         )
     elif result == "error:invalid":
         await interaction.followup.send(
             f"`{name}` isn't a valid login name: use 2-12 lowercase letters, numbers, spaces or "
-            "underscores, e.g. `/register username:beanboy`.",
+            "underscores, e.g. `beanboy`.",
             ephemeral=True,
         )
     else:
@@ -246,11 +245,8 @@ async def register_cmd(interaction: discord.Interaction, username: str | None = 
         )
 
 
-@tree.command(
-    name="resetpassword",
-    description="New password for the BeanLab account linked to your Discord (only you see it)",
-)
-async def reset_cmd(interaction: discord.Interaction):
+async def do_reset(interaction: discord.Interaction) -> None:
+    """Shared by /resetpassword and the Reset password button."""
     if not await guard(interaction):
         return
     await interaction.response.defer(ephemeral=True, thinking=True)
@@ -260,7 +256,7 @@ async def reset_cmd(interaction: discord.Interaction):
     )
     if name is None:
         await interaction.followup.send(
-            "No account is linked to your Discord yet. Use `/register` first.", ephemeral=True
+            "No account is linked to your Discord yet. Press **Register** first.", ephemeral=True
         )
         return
     log.info("password reset for %s by discord user %s (%s)", name, interaction.user, interaction.user.id)
@@ -268,6 +264,87 @@ async def reset_cmd(interaction: discord.Interaction):
         f"**Password reset**\nUsername: `{name}`\nNew password: `{password}`\n{CONNECT_HINT}",
         ephemeral=True,
     )
+
+
+@tree.command(name="register", description="Create your BeanLab OSRS account (only you see the reply)")
+@app_commands.describe(
+    username="Login name: 2-12 lowercase letters, numbers, spaces or _. Defaults to your Discord name."
+)
+async def register_cmd(interaction: discord.Interaction, username: str | None = None):
+    await do_register(interaction, username)
+
+
+@tree.command(
+    name="resetpassword",
+    description="New password for the BeanLab account linked to your Discord (only you see it)",
+)
+async def reset_cmd(interaction: discord.Interaction):
+    await do_reset(interaction)
+
+
+class RegisterModal(discord.ui.Modal, title="Register for BeanLab OSRS"):
+    username = discord.ui.TextInput(
+        label="Login name (leave blank for your Discord name)",
+        required=False,
+        min_length=2,
+        max_length=12,
+        placeholder="2-12: lowercase letters, numbers, spaces, _",
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await do_register(interaction, self.username.value.strip() or None)
+
+
+class RegisterView(discord.ui.View):
+    """Buttons on the pinned message. timeout=None + fixed custom_ids keep them working after a
+    restart (re-attached with client.add_view)."""
+
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Register", style=discord.ButtonStyle.success, custom_id="beanlab:register")
+    async def register_button(self, interaction: discord.Interaction, _button: discord.ui.Button):
+        if interaction.channel_id != CHANNEL_ID:
+            await interaction.response.send_message(f"Use this in <#{CHANNEL_ID}>.", ephemeral=True)
+            return
+        await interaction.response.send_modal(RegisterModal())
+
+    @discord.ui.button(label="Reset password", style=discord.ButtonStyle.secondary, custom_id="beanlab:reset")
+    async def reset_button(self, interaction: discord.Interaction, _button: discord.ui.Button):
+        await do_reset(interaction)
+
+
+PANEL_MARKER = "BeanLab OSRS registration"
+PANEL_TEXT = (
+    f"**{PANEL_MARKER}**\n"
+    "Press **Register** to create your game account. Discord confirms who you are, and your "
+    "username and password are shown **only to you**. Lost your password? **Reset password**.\n"
+    "You can also type `/register` or `/resetpassword`. Never post a password in this channel."
+)
+
+
+async def ensure_panel(channel: discord.TextChannel) -> None:
+    """Posts and pins the registration message once; reuses it if it is already pinned."""
+    try:
+        for msg in await channel.pins():
+            if msg.author.id == client.user.id and PANEL_MARKER in msg.content:
+                if msg.content != PANEL_TEXT:
+                    await msg.edit(content=PANEL_TEXT, view=RegisterView())
+                log.info("registration panel already pinned (message %s)", msg.id)
+                return
+        msg = await channel.send(PANEL_TEXT, view=RegisterView())
+        try:
+            await msg.pin(reason="BeanLab registration panel")
+        except (discord.Forbidden, discord.HTTPException):
+            log.warning("posted the registration panel but could not pin it (Manage Messages?)")
+        log.info("posted registration panel (message %s)", msg.id)
+    except (discord.Forbidden, discord.HTTPException) as e:
+        log.error("could not post the registration panel: %s", e)
+
+
+@client.event
+async def setup_hook():
+    client.add_view(RegisterView())  # keep the pinned buttons working across restarts
 
 
 @client.event
@@ -292,8 +369,7 @@ async def on_ready():
             client.user.id,
         )
         return
-    # No startup announcement: it re-posted on every restart. /register shows up in Discord's
-    # command picker for everyone in the guild.
+    await ensure_panel(channel)
 
 
 @client.event

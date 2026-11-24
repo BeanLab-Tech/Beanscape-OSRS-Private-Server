@@ -241,7 +241,7 @@ the game).
 
 To give someone panel access: make their game account `owner`, then add their login name to
 `panel_users` on the VM (`sudo nano /opt/osrs/web/admin_config.json`, e.g.
-`"panel_users": ["umpix"]`) and `systemctl restart osrs-admin`. Currently: `umpix`.
+`"panel_users": ["umpix"]`) and `systemctl restart osrs-admin`. Currently: none (emptied in the 2026-11-24 fresh start).
 
 Safeguards:
 - **Owner only.** The panel creates accounts and sets modlevels, so admins can't sign in (they
@@ -273,7 +273,13 @@ CSRF-protected: it only works when started from `/oauth/discord/start` in the sa
 
 ### In Discord (slash commands) — `osrs-discord` (recommended)
 
-In the registration channel, type:
+The bot keeps one **pinned message** in the registration channel with two buttons:
+
+- **Register**: opens a short form (login name, optional; blank = your Discord name), then
+  creates your account
+- **Reset password**: new password for the account linked to your Discord
+
+The same actions as slash commands:
 
 ```
 /register                     # login name defaults to your Discord name
@@ -294,8 +300,9 @@ password. Save it before dismissing the message. No DMs or browser needed.
   after the username is deleted (needs **Manage Messages**) in case it contained a password.
 - Accounts use Argon2i (m=65536, t=20, p=1), the same as the game server.
 
-The bot syncs its commands to the registration channel's server on startup (log line
-`synced 2 slash commands`). If it logs `cannot register slash commands`, re-invite it with the
+On startup the bot syncs its commands (`synced 2 slash commands`) and posts and pins the
+registration message if it isn't already pinned (`posted registration panel` / `already pinned`;
+the buttons keep working across restarts). If it logs `cannot register slash commands`, re-invite it with the
 `applications.commands` scope using the URL in that log line. Token file:
 `/opt/osrs/config/ned_discord_token`.
 
@@ -577,6 +584,11 @@ cd /opt/osrs/server/rsmod && git bundle create /opt/osrs/backups/osrs-server.bun
 ## Changelog
 
 ### 2026-11-24
+- **Fresh start:** all accounts, characters, stats, inventories and GE data wiped (backup:
+  `/opt/osrs/backups/game-2026-11-24-134327-pre-wipe.db`); `panel_users` emptied. Owners are
+  promoted manually after registering (admin panel → account → modlevel, plus `panel_users`).
+- **Discord registration panel:** pinned message with Register (opens a form) and Reset password
+  buttons, alongside `/register` and `/resetpassword`.
 - **Prayer, firemaking, cooking:** bury 55 bone/ash types, pray at 44 altar types; tinderbox on 12
   log types lights a real fire (ashes when it burns out); cook 26 raw foods on 120 fire/range types
   with level-based burning. (Upstream's cooking module turned out to be empty.)
