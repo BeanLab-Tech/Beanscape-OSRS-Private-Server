@@ -5,7 +5,7 @@ fork) or RuneLite via RSProx, locked behind the tailnet.
 
 **Stack:** RsMod + Microbot/RSProx + SQLite + Discord registration + Tailscale-only networking  
 **VM:** 123 `runescape-server` — `192.168.1.134` / `100.98.119.38` (tailnet)  
-**Repo:** https://github.com/chad-fiaschetti/Beanscape-OSRS-Private-Server (mirror: https://gitea.tail5475a4.ts.net/cfiaschetti/osrs-server.git)
+**Repo:** https://github.com/BeanLab-Tech/Beanscape-OSRS-Private-Server (mirror: https://gitea.tail5475a4.ts.net/cfiaschetti/osrs-server.git)
 
 > This repo is an **overlay** on upstream RsMod: it holds only the BeanLab modules, migrations,
 > web/bot code, client tooling and docs. Build it with `scripts/build-overlay.sh`.
@@ -323,7 +323,7 @@ cd /opt/osrs/server/rsmod
 # 1. back up the save database
 sudo cp -p .data/saves/game.db /opt/osrs/backups/game-$(date +%F-%H%M).db
 # 2. copy the overlay's api/ and content/ over the checkout (from a clone in ~/beanscape)
-git clone -b main https://github.com/chad-fiaschetti/Beanscape-OSRS-Private-Server ~/beanscape
+git clone -b main https://github.com/BeanLab-Tech/Beanscape-OSRS-Private-Server ~/beanscape
 sudo rsync -a ~/beanscape/api ~/beanscape/content /opt/osrs/server/rsmod/
 # 3. STOP the server before building (see warning)
 sudo systemctl stop osrs-server

@@ -33,7 +33,7 @@
 | Game service | `osrs-server` (runs as user `osrs`) |
 | Discord bot service | `osrs-discord` |
 | Bot source (read only) | `/opt/osrs/discordbot/bot.py` |
-| Repo with the fixes | `https://github.com/chad-fiaschetti/Beanscape-OSRS-Private-Server`, branch `claude/trusting-bardeen-pf87qp` |
+| Repo with the fixes | `https://github.com/BeanLab-Tech/Beanscape-OSRS-Private-Server`, branch `claude/trusting-bardeen-pf87qp` |
 
 ---
 
@@ -104,7 +104,7 @@ Write down the answer exactly. Do not continue without it.
 ```bash
 rm -rf /opt/osrs/overlay-new
 git clone --depth 1 --branch claude/trusting-bardeen-pf87qp \
-  https://github.com/chad-fiaschetti/Beanscape-OSRS-Private-Server.git /opt/osrs/overlay-new
+  https://github.com/BeanLab-Tech/Beanscape-OSRS-Private-Server.git /opt/osrs/overlay-new
 ```
 **Expected:** `Cloning into '/opt/osrs/overlay-new'...` and no error.
 **If it asks for a username/password or says "not found":** the repo is private. **STOP** and

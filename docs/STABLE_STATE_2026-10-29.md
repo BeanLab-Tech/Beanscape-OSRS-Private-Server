@@ -29,7 +29,7 @@ Taken before the Ferox feature buildout begins. Proxmox snapshot
   (local scratch clone only) — pushed to Gitea with the Ferox buildout.
 
 ## Repos
-- GitHub (source of truth): `chad-fiaschetti/Beanscape-OSRS-Private-Server`
+- GitHub (source of truth): `BeanLab-Tech/Beanscape-OSRS-Private-Server`
   main @ `55175cc`
 - Gitea mirror: `cfiaschetti/osrs-server` @ `http://gitea.tail5475a4.ts.net:3000`
   (also `http://192.168.1.117:3000`), main @ `55175cc`
