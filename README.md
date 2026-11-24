@@ -378,6 +378,24 @@ UPDATE accounts SET modlevel = 'admin' WHERE login_username = 'theirusername';
 -- modlevel: NULL (player), 'moderator', 'admin', 'owner'
 ```
 
+### Claude on GitHub
+
+`.github/workflows/claude.yml` runs [Claude Code](https://github.com/anthropics/claude-code-action)
+when an org member or collaborator mentions `@claude` in an issue, PR comment or review (other
+commenters are ignored, since the repo is public). One-time setup:
+
+1. Install the Claude GitHub app: https://github.com/apps/claude → **Install** → `BeanLab-Tech` →
+   **Only select repositories** → `Beanscape-OSRS-Private-Server`
+2. Create a token with your Claude subscription: `claude setup-token`
+3. Add it as a repo secret (paste the token when prompted):
+   ```powershell
+   gh secret set CLAUDE_CODE_OAUTH_TOKEN -R BeanLab-Tech/Beanscape-OSRS-Private-Server
+   ```
+
+Alternatively run `claude` in a terminal inside a clone and use `/install-github-app`, which does all
+three. Claude in a runner can't reach VM 123; it works on the overlay and `scripts/build-overlay.sh`.
+CI (`ci.yml`) also has a manual **Run workflow** button (`workflow_dispatch`).
+
 ### Adding Content
 
 New content goes in `content/` as a module (auto-discovered; no plugin list):
