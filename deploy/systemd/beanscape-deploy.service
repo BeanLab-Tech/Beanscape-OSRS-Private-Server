@@ -1,0 +1,10 @@
+[Unit]
+Description=Beanscape auto-deploy from GitHub main (see deploy/deploy-vm.sh)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/osrs/deploy/deploy-vm.sh
+# A full build can take several minutes.
+TimeoutStartSec=30min

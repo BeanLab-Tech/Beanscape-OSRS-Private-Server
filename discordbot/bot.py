@@ -32,6 +32,13 @@ from discord import app_commands
 
 TOKEN_FILE = pathlib.Path("/opt/osrs/config/ned_discord_token")
 DB_PATH = pathlib.Path("/opt/osrs/server/rsmod/.data/saves/game.db")
+# Written by deploy/deploy-vm.sh; the bot announces each new client build once.
+CLIENT_BUILD_FILE = pathlib.Path("/opt/osrs/config/webconfig/runelite/client/CURRENT")
+ANNOUNCED_BUILD_FILE = pathlib.Path("/opt/osrs/discordbot/announced-client-build")
+UPDATER_URL = (
+    "https://raw.githubusercontent.com/BeanLab-Tech/Beanscape-OSRS-Private-Server/main/"
+    "client/microbot/Update-Client.ps1"
+)
 CHANNEL_ID = 1555796182230638715
 
 USERNAME_RE = re.compile(r"^[a-z0-9_ ]{2,12}$")
@@ -401,6 +408,39 @@ async def setup_registration() -> None:
         )
         return
     await ensure_panel(channel)
+    await announce_client_update(channel)
+
+
+def _read_int(path: pathlib.Path) -> int | None:
+    try:
+        return int(path.read_text().strip())
+    except (OSError, ValueError):
+        return None
+
+
+async def announce_client_update(channel: discord.TextChannel) -> None:
+    """Posts once per new client build (deploys restart the bot, so this runs after each one)."""
+    current = _read_int(CLIENT_BUILD_FILE)
+    if current is None:
+        return
+    announced = _read_int(ANNOUNCED_BUILD_FILE) or 0
+    if current <= announced:
+        return
+    try:
+        await channel.send(
+            f"**BeanLab client update: build {current}**\n"
+            "Close Microbot, then run the updater in your client folder:\n"
+            "```powershell\n"
+            'powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\\Desktop\\OSRS-Microbot-Client'
+            '\\Update-Client.ps1"\n```'
+            f"No updater yet? Download it from <{UPDATER_URL}> and run it the same way. An "
+            "out-of-date client also shows **(NEW CLIENT AVAILABLE)** in its title bar."
+        )
+    except (discord.Forbidden, discord.HTTPException) as e:
+        log.error("could not announce client build %s (will retry next start): %s", current, e)
+        return
+    ANNOUNCED_BUILD_FILE.write_text(f"{current}\n")
+    log.info("announced client build %s", current)
 
 
 @client.event

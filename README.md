@@ -16,18 +16,19 @@ fork) or RuneLite via RSProx, locked behind the tailnet.
 ## Table of Contents
 1. [What's Included](#whats-included)
 2. [Architecture](#architecture)
-3. [Player Setup — Microbot (recommended)](#player-setup--microbot-recommended)
-4. [Player Setup — RSProx + RuneLite (alternative)](#player-setup--rsprox--runelite-alternative)
-5. [Registration](#registration)
-6. [Playing the Game](#playing-the-game)
-7. [In-Game Commands](#in-game-commands)
-8. [Server Setup & Deployment (admins)](#server-setup--deployment-admins)
-9. [Admin Reference](#admin-reference)
-10. [Security Notes](#security-notes)
-11. [Changelog](#changelog)
-12. [Current Progress](#current-progress)
-13. [Roadmap / Next Steps](#roadmap--next-steps)
-14. [Troubleshooting](#troubleshooting)
+3. [Updates (players & admins)](#updates)
+4. [Player Setup — Microbot (recommended)](#player-setup--microbot-recommended)
+5. [Player Setup — RSProx + RuneLite (alternative)](#player-setup--rsprox--runelite-alternative)
+6. [Registration](#registration)
+7. [Playing the Game](#playing-the-game)
+8. [In-Game Commands](#in-game-commands)
+9. [Server Setup & Deployment (admins)](#server-setup--deployment-admins)
+10. [Admin Reference](#admin-reference)
+11. [Security Notes](#security-notes)
+12. [Changelog](#changelog)
+13. [Current Progress](#current-progress)
+14. [Roadmap / Next Steps](#roadmap--next-steps)
+15. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -98,6 +99,81 @@ reach areas whose entrances aren't scripted.
 
 ---
 
+## Updates
+
+Everything ships from the `main` branch of this repo. Merge to `main` → CI passes → within ~5
+minutes the server deploys it and restarts; client changes also prompt players to update.
+
+### For players: updating the client
+
+You'll know an update is out when **Microbot's title bar says "(NEW CLIENT AVAILABLE)"** or the bot
+posts **"BeanLab client update: build N"** in the Discord registration channel. To update:
+
+1. Close Microbot.
+2. Run the updater in your client folder:
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\Desktop\OSRS-Microbot-Client\Update-Client.ps1"
+   ```
+3. Start the client again with `Play-Microbot.bat`.
+
+No `Update-Client.ps1` yet (first install, or a client from before build 2)? Download it once and
+run it the same way. It also does a complete first-time install (downloads and verifies
+Microbot 2.0.20, patches it, installs the launcher):
+
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\Desktop\OSRS-Microbot-Client" | Out-Null
+Invoke-WebRequest https://raw.githubusercontent.com/BeanLab-Tech/Beanscape-OSRS-Private-Server/main/client/microbot/Update-Client.ps1 -OutFile "$env:USERPROFILE\Desktop\OSRS-Microbot-Client\Update-Client.ps1"
+powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\Desktop\OSRS-Microbot-Client\Update-Client.ps1"
+```
+
+Needs Python 3.10+ and Java 21 (see [Prerequisites](#prerequisites)). `-CloseRunning` closes a
+running Microbot for you; `-ClientDir <path>` installs elsewhere. Your profile, plugins and settings
+in `OSRS-Microbot-Client\home` are kept.
+
+### For admins: how a release ships
+
+On the VM, `beanscape-deploy.timer` runs [`deploy/deploy-vm.sh`](deploy/deploy-vm.sh) every 5
+minutes. When `main` has a new commit **and its CI check passed**, it:
+
+1. syncs `api/` + `content/` into `/opt/osrs/server/rsmod` and **compiles while the old server keeps
+   running**. A failed build stops here: the game stays up on the previous release, the error goes
+   to the deploy log, and that commit isn't retried (push a fix);
+2. backs up `game.db` to `/opt/osrs/backups/game-<time>-pre-deploy.db` (keeps the newest 20);
+3. installs `web/`, `discordbot/`, `webconfig/` and the systemd drop-ins from `deploy/systemd/`
+   (secrets like `config.json`, `env`, `admin_config.json` and the bot token are never touched);
+4. publishes the client build (`client/microbot/CLIENT_BUILD`) so older clients get the prompt;
+5. **full restart**: stops the game server (online players are saved), installs the new build,
+   starts it, then restarts `osrs-webconfig`, `osrs-web`, `osrs-admin` and `osrs-discord`.
+
+Commits that only touch docs are recorded without a restart. Players online during a deploy are
+disconnected for about a minute.
+
+```bash
+journalctl -u beanscape-deploy -n 100           # what the last deploys did
+systemctl list-timers beanscape-deploy.timer    # next check
+sudo systemctl start beanscape-deploy           # check now instead of waiting
+sudo /opt/osrs/deploy/deploy-vm.sh --force      # redeploy the current main
+cat /opt/osrs/deploy/deployed-sha               # what's live
+```
+
+**Shipping a client update:** change the client (`patch-microbot.py`, `Play-Microbot.bat`,
+`SERVER_MODULUS`, …) **and bump `client/microbot/CLIENT_BUILD`** in the same PR. After the deploy,
+every older client shows "(NEW CLIENT AVAILABLE)" and the bot posts the update notice once (it needs
+Send Messages in the registration channel). Server-only changes don't need a client update.
+
+**Rolling back:** revert the commit on `main` (the next deploy ships the revert), or restore a
+`pre-deploy` backup with the game server stopped.
+
+**First-time setup** (already done on VM 123): `sudo bash deploy/install.sh` from a clone of this
+repo, then `sudo systemctl start beanscape-deploy`.
+
+**Admin API:** Umpix's in-client admin API ships with the server but its listener is off
+(`deploy/systemd/osrs-server.service.d/admin-api.conf` sets `ADMIN_API_ENABLED=false`). To turn it
+on after review, change that file to `true` and merge; see [`docs/ADMIN_API_DEPLOY.md`](docs/ADMIN_API_DEPLOY.md)
+for exposing it.
+
+---
+
 ## Player Setup — Microbot (recommended)
 
 Microbot is a RuneLite fork with automation plugins. It connects **directly** to the server; no
@@ -153,7 +229,7 @@ Expected output: three `patched ...` lines, then `wrote ...`. What it changes:
 |-------|----------|--------|
 | `bc.class` | RSA login modulus | Jagex's key → the BeanLab server key (the modulus above, same as in `proxy-targets.yaml`) |
 | `bl.class` | host allowlist entry `127.0.0.1` | `""`, so the client accepts the BeanLab host (same trick RSProx uses) |
-| `MicrobotVersionChecker.class` | `https://microbot.cloud/api/version/client` | `<server>/runelite/microbot-version.txt`, which says `2.0.20`, so the client stops marking itself "NEW CLIENT AVAILABLE" |
+| `MicrobotVersionChecker.class` | `https://microbot.cloud/api/version/client` | `<server>/runelite/client/<CLIENT_BUILD>.txt`, which says `2.0.20` for the current client build and `2.0.21` for older ones, so only out-of-date clients show "NEW CLIENT AVAILABLE" (see [Updates](#updates)) |
 
 Everything else is copied byte for byte; the game port stays 43594. If the server's RSA key ever
 changes, re-run this step with the new modulus against the **original** jar. An optional 4th
@@ -440,6 +516,9 @@ scripts/build-overlay.sh :content:other:admin-potato:spotlessApply   # fix forma
 
 ### Deploy to the VM
 
+**Normally automatic:** merging to `main` deploys within ~5 minutes (see [Updates](#for-admins-how-a-release-ships)).
+The manual steps below are only for when auto-deploy is broken:
+
 ```bash
 ssh runescape-server            # or ssh root@100.98.119.38
 cd /opt/osrs/server/rsmod
@@ -602,6 +681,11 @@ cd /opt/osrs/server/rsmod && git bundle create /opt/osrs/backups/osrs-server.bun
 ## Changelog
 
 ### 2026-11-24
+- **Auto-deploy & client updates:** `beanscape-deploy.timer` deploys every CI-green commit on
+  `main` with a full restart (build first, backup, restart all services); client build numbers
+  (`CLIENT_BUILD`) make older clients show "(NEW CLIENT AVAILABLE)" and the bot post an update
+  notice; `Update-Client.ps1` installs/updates the client in one command. Umpix's admin API
+  deploys with its listener off.
 - **Fresh start:** all accounts, characters, stats, inventories and GE data wiped (backup:
   `/opt/osrs/backups/game-2026-11-24-134327-pre-wipe.db`); `panel_users` emptied. Owners are
   promoted manually after registering (admin panel → account → modlevel, plus `panel_users`).

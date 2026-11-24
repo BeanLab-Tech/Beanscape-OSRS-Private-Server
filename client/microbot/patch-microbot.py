@@ -12,14 +12,17 @@ Exactly three constants change:
   bc.class  Jagex's RSA login modulus  ->  the BeanLab server's modulus
   bl.class  host allowlist entry "127.0.0.1" -> ""  (endsWith("") lets the client accept any host)
   plugins/microbot/MicrobotVersionChecker.class
-            https://microbot.cloud/api/version/client -> <base>/runelite/microbot-version.txt
-            (that file says 2.0.20, the newest Microbot on OSRS rev 233, so the client stops
-            flagging itself "NEW CLIENT AVAILABLE"; newer Microbot can't log in to rev 233)
+            https://microbot.cloud/api/version/client -> <base>/runelite/client/<build>.txt
+            <build> is CLIENT_BUILD next to this script. The server answers 2.0.20 (up to date)
+            for the current build and 2.0.21 for older ones, so an out-of-date BeanLab client
+            shows Microbot's own "(NEW CLIENT AVAILABLE)" prompt. (Newer real Microbot releases
+            can't log in to rev 233, so this check now tracks BeanLab client builds instead.)
 The first two are the same changes RSProx makes to RuneLite. The game port stays 43594, and the
 server address comes from --jav_config at launch. Every other jar entry is copied byte for byte.
 """
 
 import hashlib
+import pathlib
 import struct
 import sys
 import zipfile
@@ -85,11 +88,15 @@ def main() -> None:
     if digest != EXPECTED_SHA256:
         raise SystemExit(f"{src} is not Microbot 2.0.20 (sha256 {digest}); refusing to patch")
 
+    build_file = pathlib.Path(__file__).with_name("CLIENT_BUILD")
+    build = int(build_file.read_text().strip()) if build_file.exists() else 1
+    version_url = f"{base}/runelite/client/{build}.txt"
     patches = {
         "bc.class": {JAGEX_MODULUS.encode(): modulus.encode()},
         "bl.class": {b"127.0.0.1": b""},
-        VERSION_CHECKER: {MICROBOT_VERSION_URL.encode(): f"{base}/runelite/microbot-version.txt".encode()},
+        VERSION_CHECKER: {MICROBOT_VERSION_URL.encode(): version_url.encode()},
     }
+    print(f"client build {build}: version check -> {version_url}")
     with zipfile.ZipFile(src) as zin, zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as zout:
         for info in zin.infolist():
             data = zin.read(info.filename)
