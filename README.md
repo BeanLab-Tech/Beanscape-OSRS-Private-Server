@@ -43,9 +43,27 @@ fork) or RuneLite via RSProx, locked behind the tailnet.
 | Members for every account | `api/account/.../CharacterAccountApplier.kt` + V11 | Forced at login |
 | Discord OAuth registration | `web/app.py` (`osrs-web`) | `https://runescape-server.tail5475a4.ts.net/oauth/discord/start` |
 | Admin web panel | `web/admin_app.py` (`osrs-admin`) | `https://runescape-server.tail5475a4.ts.net/admin` |
-| Discord `!register` bot | `discordbot/bot.py` (`osrs-discord`, disabled by default) | Password only ever sent by DM |
+| Discord registration (`/register`, `/resetpassword`) | `discordbot/bot.py` (`osrs-discord`) | Slash commands, ephemeral replies, linked to Discord ID |
+| Generic doors & gates | `content/other/beanlab-content/GenericDoorsScript.kt` | ~900 unscripted doors/gates (incl. members gates) become passable |
+| Eating & drinking | `content/other/beanlab-content/ConsumablesScript.kt` | Every Eat/Drink item: food heals, potions boost/restore, doses step down |
 | Microbot client patcher + launcher | `client/microbot/` | Microbot 2.0.20 = RuneLite 1.11.19 = rev 233 |
 | Client webconfig | `webconfig/` (`osrs-webconfig`) | `jav_config.ws`, `world_list.ws`, RuneLite `worlds.js`, version file; served no-cache |
+
+### Not yet implemented
+
+RsMod upstream content is thin (upstream has Lumbridge, cooking, fishing, woodcutting, combat
+spells, special attacks, banks, some generic NPCs/objects). Still missing, roughly by impact:
+
+- **Skills:** mining, smithing, firemaking, crafting, fletching, herblore, prayer (bones), agility,
+  thieving, runecrafting, slayer, hunter, farming, construction (cooking, fishing and woodcutting
+  exist; quests are only marked complete by `::questsdone`)
+- **Objects:** agility shortcuts, stiles, levers, most skilling objects, diagonal doors
+- **NPC content:** shops, most dialogue, boss mechanics (bosses spawn with stats only)
+- **Item effects:** poison/antipoison, special potions (divine, antifire, stamina's run-drain
+  reduction), multi-bite foods eat in one bite, anglerfish overheal
+
+Each is a module under `content/`; see [Adding Content](#adding-content). Use `::teleports` to
+reach areas whose entrances aren't scripted.
 
 ---
 
@@ -251,20 +269,33 @@ Your username is your Discord global name (lowercased, 2-12 chars). Discord IDs 
 CSRF-protected: it only works when started from `/oauth/discord/start` in the same browser, within
 10 minutes.
 
-### Discord bot (`!register`) — `osrs-discord` (disabled by default)
+### In Discord (slash commands) — `osrs-discord` (recommended)
+
+In the registration channel, type:
 
 ```
-!register <username>        # 2-12 chars: lowercase letters, numbers, underscore
+/register                     # login name defaults to your Discord name
+/register username:<name>     # or pick one: 2-12 lowercase letters, numbers, spaces, _
+/resetpassword                # new password for the account linked to your Discord
 ```
 
-1. **Open your DMs first** (Server menu → Privacy Settings → allow DMs from server members)
-2. The bot DMs a generated 16-character password. If it can't DM you, it creates nothing.
+The reply is **ephemeral**: only you see it, with your username and a generated 16-character
+password. Save it before dismissing the message. No DMs or browser needed.
 
-The bot never accepts or posts a password in the channel: a `!register` with anything after the
-username is deleted (needs **Manage Messages**) and refused. If the credentials DM fails, the new
-account is rolled back. Accounts use Argon2i (m=65536, t=20, p=1), the same as the game server.
+- Discord authenticates whoever runs a slash command, so the bot gets your verified Discord ID
+  directly (no OAuth redirect). Your game account is **linked to that Discord ID**: one account per
+  Discord user, shared with the web registration below. Running `/register` again tells you your
+  existing username.
+- `/resetpassword` only changes the account linked to *your* Discord, so it can't touch anyone
+  else's. A 30-second cooldown applies to both commands.
+- The old `!register` text command now just points to `/register`; a `!register` with anything
+  after the username is deleted (needs **Manage Messages**) in case it contained a password.
+- Accounts use Argon2i (m=65536, t=20, p=1), the same as the game server.
 
-To run the bot: `systemctl enable --now osrs-discord` (token file: `/opt/osrs/config/ned_discord_token`).
+The bot syncs its commands to the registration channel's server on startup (log line
+`synced 2 slash commands`). If it logs `cannot register slash commands`, re-invite it with the
+`applications.commands` scope using the URL in that log line. Token file:
+`/opt/osrs/config/ned_discord_token`.
 
 ---
 
@@ -416,7 +447,7 @@ Web and bot code: copy `web/*.py` + `web/admin_templates/` to `/opt/osrs/web/` a
 | `osrs-webconfig.service` | Client webconfig (`webconfig-serve.py`, no-cache, :8080, `/`) | enabled |
 | `osrs-web.service` | Discord OAuth registration (:8085, `/oauth`) | enabled |
 | `osrs-admin.service` | Admin panel (:8086, `/admin`) | enabled |
-| `osrs-discord.service` | `!register` bot | **disabled** |
+| `osrs-discord.service` | Discord `/register` + `/resetpassword` bot | enabled |
 
 ```bash
 systemctl status osrs-server
@@ -517,6 +548,12 @@ cd /opt/osrs/server/rsmod && git bundle create /opt/osrs/backups/osrs-server.bun
 ## Changelog
 
 ### 2026-11-24
+- **Doors & gates:** every unscripted door/gate (902, incl. members gates) is passable: using it
+  walks you through. Hand-scripted animated doors are unchanged.
+- **Food & potions:** RsMod had no eating or drinking; 347 foods and 510 potion doses now work
+  (heal table, combat/ranging/magic/prayer/restore/brew/energy effects, dose step-down, 3-tick delay).
+- **Discord registration in Discord:** `/register` and `/resetpassword` slash commands with
+  ephemeral replies, linked to the Discord ID; `osrs-discord` enabled.
 - **Admin panel:** allowlisted owner game accounts (`panel_users`) can sign in with their game password (before, only
   the single `admin_config.json` login worked, so staff accounts created in the panel got
   "Invalid credentials").
@@ -557,7 +594,7 @@ Grand Exchange, `::name`, Discord registration, realm hardening (V9) — see
 | 1. Tailnet-only, no public access | ✅ Done | ufw default deny, 22+43594 scoped to `100.64.0.0/10` |
 | 2. Client | ✅ Done | Microbot 2.0.20 direct (patched) and RuneLite 1.11.19 via RSProx; both reach login |
 | 3. Grand Exchange | 🟡 Code complete | Engine + `::ge`, unit-tested; not yet tested in-game |
-| 4. Discord registration + name change | ✅ Web live / 🟡 bot disabled | OAuth registration on `/oauth`; bot fixed but `osrs-discord` disabled |
+| 4. Discord registration + name change | ✅ Done | `/register` in Discord (ephemeral, linked to Discord ID) + web OAuth on `/oauth` |
 | 5. Admin tooling | ✅ Done | Potato menu, teleports, `::questsdone`, members for all |
 
 **Infrastructure:** `osrs-server` on 43594 · tailnet 100.98.119.38 (tag:game) · ufw baseline ·
@@ -574,7 +611,7 @@ Full reasoning in [`docs/AUDIT_2026-10-29.md`](docs/AUDIT_2026-10-29.md) §6.
 1. **Live-test** `::ge` (incl. restart with open offers), `::name` with two accounts, and the
    teleport destinations (fix any that land off-target)
 2. **Nightly `game.db` backups** (`sqlite3 .backup`) and a fresh Proxmox snapshot
-3. Decide whether to re-enable `osrs-discord` alongside web registration
+3. Pick the next missing content (see [Not yet implemented](#not-yet-implemented))
 
 ### Next
 4. Name-change rules: cooldown, profanity filter, reserved names
@@ -625,8 +662,15 @@ into game chat by default. To hide them: **Microbot plugin settings → Game cha
 game chat logging off).
 
 ### "Nothing interesting happens" on a gate, door or object
-That's RsMod's reply for an object with no script. Many members gates, doors and shortcuts aren't
-implemented upstream yet; it isn't a membership problem. Use `::teleports` to get past them.
+That's RsMod's reply for an object with no script. Doors and gates are covered by the generic
+pass-through (`[beanlab] generic pass-through registered for N unscripted doors/gates` at startup),
+except diagonal ones. Other objects (shortcuts, stiles, levers, most skilling objects) still aren't
+implemented upstream; it isn't a membership problem. Use `::teleports` to get past them.
+
+### Food or a potion says "Nothing interesting happens"
+Check the startup log for `[beanlab] consumables registered`. Items whose option isn't literally
+"Eat"/"Drink", or potions without a `(n)` dose suffix, aren't covered. Foods not in `FoodTable` heal 3;
+potions not in `PotionTable` are consumed with "no special effect".
 
 ### `patch-microbot.py` says "is not Microbot 2.0.20" or "constant not found"
 You passed the already-patched jar or a different version. Use the untouched download and check its
@@ -658,8 +702,9 @@ report the quest name.
 Start again from `/oauth/discord/start` in the same browser (the state cookie lasts 10 minutes and
 works once).
 
-### Discord bot offline
-It's disabled by default: `systemctl enable --now osrs-discord`, then `journalctl -u osrs-discord -n 20`.
+### Discord bot offline / `/register` doesn't appear
+`systemctl status osrs-discord` and `journalctl -u osrs-discord -n 30`. Look for `synced 2 slash
+commands`; if it says `cannot register slash commands`, re-invite the bot with the URL it logs.
 
 ### GE commands not working
 Restart after GE migrations (Flyway runs on boot) and check V7/V8 in `flyway_schema_history`. If
