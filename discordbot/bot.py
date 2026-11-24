@@ -1,9 +1,14 @@
 """Ned's OSRS registration bot (BeanLab OSRS private server).
 
-Listens in its dedicated Discord channel for !register <username> [password],
-pre-creates the account in the RsMod SQLite database (argon2i hash, identical
-parameters to the game's Argon2PasswordHashing), and DMs the credentials to
-the registering user. The game server completes character creation on first
+Listens in its dedicated Discord channel for !register <username>, pre-creates
+the account in the RsMod SQLite database (argon2i hash, identical parameters to
+the game's Argon2PasswordHashing), and DMs a generated password to the
+registering user.
+
+Passwords never appear in the channel: the bot does not accept one as an
+argument (and deletes a message that includes one), checks that it can DM the
+user before creating anything, and removes the account again if the
+credentials DM fails. The game server completes character creation on first
 login through its own account-loader path.
 """
 
@@ -24,6 +29,7 @@ CHANNEL_ID = 1555796182230638715
 
 USERNAME_RE = re.compile(r"^[a-z0-9_ ]{2,12}$")
 ALLOWED_PASSWORD_CHARS = string.ascii_letters + string.digits
+PASSWORD_LENGTH = 16
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("osrs-reg")
@@ -67,6 +73,23 @@ def register_account(username: str, password: str) -> str:
     except sqlite3.Error as e:
         log.error("db error during registration: %s", e)
         return "error:db"
+
+
+def delete_account(username: str) -> None:
+    """Rolls back an account that was created but whose credentials never reached the user."""
+    try:
+        conn = db_connect()
+        try:
+            conn.execute("DELETE FROM accounts WHERE login_username = ?", (username,))
+            conn.commit()
+        finally:
+            conn.close()
+    except sqlite3.Error as e:
+        log.error("db error rolling back %s: %s", username, e)
+
+
+def generate_password() -> str:
+    return "".join(secrets.choice(ALLOWED_PASSWORD_CHARS) for _ in range(PASSWORD_LENGTH))
 
 
 def self_test() -> bool:
@@ -113,8 +136,8 @@ async def on_ready():
     if channel is not None:
         await channel.send(
             "BeanLab OSRS registration bot online. "
-            "Register with `!register <username>` (optional: `!register <username> <password>`). "
-            "Credentials are sent by DM. Then connect with RSProx (target: BeanLab OSRS)."
+            "Register with `!register <username>` - your password is generated and sent by DM "
+            "(open your DMs first). Never post a password in this channel."
         )
     else:
         log.warning("channel %s not found - check bot permissions/invites", CHANNEL_ID)
@@ -130,32 +153,43 @@ async def on_message(message):
     if not content.startswith("!register"):
         if content.startswith("!help"):
             await message.reply(
-                "Usage: `!register <username>` or `!register <username> <password>` "
-                "(username: 2-12 chars, letters/numbers/space/underscore)."
+                "Usage: `!register <username>` (2-12 chars: letters, numbers, underscore). "
+                "Your password is generated and sent by DM, so open your DMs first."
             )
         return
 
     parts = content.split()
-    username = parts[1].lower() if len(parts) > 1 else ""
-    if len(parts) >= 3:
-        password = parts[2]
-    else:
-        password = "".join(secrets.choice(ALLOWED_PASSWORD_CHARS) for _ in range(10))
-
+    if len(parts) > 2:
+        # Something after the username is probably a password: get it out of the channel.
+        try:
+            await message.delete()
+        except (discord.Forbidden, discord.HTTPException):
+            log.warning("could not delete a !register message with extra args (Manage Messages?)")
+        await message.channel.send(
+            f"{message.author.mention} don't post passwords here - I generate one and DM it. "
+            f"Use `!register <username>` only. If that was a real password, don't reuse it."
+        )
+        return
+    username = parts[1].lower() if len(parts) == 2 else ""
     if not username:
-        await message.reply("Usage: `!register <username> [password]`")
-        return
-    if len(password) < 6 or len(password) > 32:
-        await message.reply("Password must be 6-32 characters.")
+        await message.reply("Usage: `!register <username>`")
         return
 
-    await asyncio.get_event_loop().run_in_executor(None, _handle, message, username, password)
+    # Check we can DM before creating anything, so credentials never land in the channel.
+    try:
+        await message.author.send(f"Creating BeanLab OSRS account `{username}`...")
+    except discord.Forbidden:
+        await message.reply(
+            "I can't DM you. Allow direct messages from server members "
+            "(Server menu > Privacy Settings), then run `!register` again. Nothing was created."
+        )
+        return
 
-
-def _handle(message, username, password):
-    # register synchronously, then schedule the replies
-    result = register_account(username, password)
-    asyncio.run_coroutine_threadsafe(_reply(message, username, password, result), client.loop)
+    password = generate_password()
+    result = await asyncio.get_running_loop().run_in_executor(
+        None, register_account, username, password
+    )
+    await _reply(message, username, password, result)
 
 
 async def _reply(message, username, password, result):
@@ -165,25 +199,26 @@ async def _reply(message, username, password, result):
                 f"**BeanLab OSRS account created**\n"
                 f"Username: `{username}`\n"
                 f"Password: `{password}`\n"
-                f"Connect via RSProx (proxy target: BeanLab OSRS) and log in. "
+                f"Connect with the BeanLab client and log in. "
                 f"You can change your display name in-game with `::name <new name>`."
             )
+        except (discord.Forbidden, discord.HTTPException):
+            # DMs closed between the check and now: undo, never fall back to the channel.
+            await asyncio.get_running_loop().run_in_executor(None, delete_account, username)
             await message.reply(
-                f"{message.author.mention} registered `{username}` - credentials sent by DM."
+                "I couldn't DM your password, so the account was not kept. "
+                "Open your DMs and run `!register` again."
             )
-            log.info("registered %s for discord user %s", username, message.author)
-        except discord.Forbidden:
-            await message.reply(
-                f"{message.author.mention} registered `{username}`. "
-                f"I can't DM you (DMs closed) - password is `{password}`. "
-                f"Change it later by asking an admin."
-            )
+            log.warning("rolled back %s: credentials DM failed", username)
+            return
+        await message.reply(f"{message.author.mention} registered `{username}` - password sent by DM.")
+        log.info("registered %s for discord user %s", username, message.author)
     elif result == "taken":
+        await message.author.send(f"`{username}` is already registered - pick another name.")
         await message.reply(f"`{username}` is already registered - pick another name.")
     elif result == "error:invalid":
         await message.reply(
-            "Invalid username: use 2-12 characters, lowercase letters, numbers, "
-            "spaces or underscores."
+            "Invalid username: use 2-12 characters, lowercase letters, numbers or underscores."
         )
     else:
         await message.reply("Registration failed (database error) - try again shortly.")

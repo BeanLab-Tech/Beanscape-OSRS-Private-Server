@@ -7,12 +7,14 @@ import org.rsmod.api.config.refs.modlevels
 import org.rsmod.api.config.refs.objs
 import org.rsmod.api.invtx.invAdd
 import org.rsmod.api.invtx.invClear
+import org.rsmod.api.invtx.invDel
 import org.rsmod.api.player.output.MiscOutput
 import org.rsmod.api.player.protect.ProtectedAccess
 import org.rsmod.api.player.stat.PlayerSkillXP
 import org.rsmod.api.script.onOpHeld1
 import org.rsmod.api.utils.system.SafeServiceExit
 import org.rsmod.game.stat.PlayerSkillXPTable
+import org.rsmod.game.type.mod.ModLevelType
 import org.rsmod.game.type.mod.ModLevelTypeList
 import org.rsmod.game.type.stat.StatTypeList
 import org.rsmod.map.CoordGrid
@@ -21,11 +23,11 @@ import org.rsmod.plugin.scripts.PluginScript
 /**
  * BeanLab admin "rotten potato" (obj 5733) — mirrors the Jagex moderator potato.
  *
- * Granted to moderator+ on login. Right-click > Use opens a protected menu of admin actions (set
- * all stats, wipe inventory, teleport, spawn item, set modlevel, kick, reboot). Non-tradeable +
- * non-stackable so it can't leak or be duped.
+ * Right-click > Use opens a menu filtered by modlevel: moderator (teleports, my position, kick me),
+ * admin (+ set stats, wipe inventory, spawn item, set modlevel up to your own), owner (+ reboots).
+ * A non-staff holder has the potato confiscated. Get one as an admin with ::invadd 5733.
  *
- * Rollback: delete content/other/admin-potato and rebuild :server:install.
+ * Rollback: delete content/other/admin-potato and rebuild :server:app:installDist.
  */
 public class RottenPotatoPlugin
 @Inject
@@ -41,53 +43,60 @@ constructor(private val statTypes: StatTypeList, private val modLevelTypes: ModL
         // but the `Op1` event is passed as the lambda parameter, so inside the `when`
         // branch `this` re-binds to the event. Capture the ProtectedAccess receiver
         // explicitly and call the menu helpers on it.
-        onOpHeld1(objs.rotten_potato) {
-            // Grant the potato to moderator+ on first use. We deliberately do NOT hook
-            // SessionStateEvent.EngineLogin here: it's a KeyedEvent published only at
-            // id=0, and LoginScript already owns that slot (EventBus allows one handler
-            // per id). Granting on use is equivalent for our purpose — the potato is
-            // non-tradeable and only ever held by the admin who uses it.
-            val pa = this
-            logger.info {
-                "[potato] onOpHeld1 fired for player ${pa.player.displayName} modLevel=${pa.player.modLevel}"
+        onOpHeld1(objs.rotten_potato) { openPotatoMenu() }
+    }
+
+    /**
+     * One menu entry: [label] shown only to players with at least [level]; [action] re-checks the
+     * level before running, in case it changed while the menu was open.
+     */
+    private class PotatoAction(
+        val label: String,
+        val level: ModLevelType,
+        val action: suspend ProtectedAccess.() -> Unit,
+    )
+
+    private val actions =
+        listOf(
+            PotatoAction("Teleports", modlevels.moderator) { openTeleportMenu() },
+            PotatoAction("My position", modlevels.moderator) { myPosition() },
+            PotatoAction("Kick me", modlevels.moderator) { kickMe() },
+            PotatoAction("Set all stats", modlevels.admin) { setAllStats() },
+            PotatoAction("Wipe inventory", modlevels.admin) { wipeInventory() },
+            PotatoAction("Spawn item", modlevels.admin) { spawnItem() },
+            PotatoAction("Set my modlevel", modlevels.admin) { setMyModlevel() },
+            PotatoAction("Reboot world", modlevels.owner) { rebootWorld() },
+            PotatoAction("Slow reboot", modlevels.owner) { slowReboot() },
+        )
+
+    private suspend fun ProtectedAccess.openPotatoMenu() {
+        if (!player.modLevel.hasAccessTo(modlevels.moderator)) {
+            // Not staff: confiscate every potato they hold. Nothing else in the menu is reachable.
+            logger.warn {
+                "[potato] non-staff ${player.displayName} (modLevel=${player.modLevel}) used a " +
+                    "rotten potato; removing it"
             }
-            if (
-                pa.player.modLevel.hasAccessTo(modlevels.moderator) &&
-                    !pa.player.inv.contains(objs.rotten_potato)
-            ) {
-                pa.player.invAdd(pa.player.inv, objs.rotten_potato, 1, strict = false)
+            while (player.inv.contains(objs.rotten_potato)) {
+                val removed = player.invDel(player.inv, objs.rotten_potato, 1, strict = false)
+                if (!removed.success) break
             }
-            val choice =
-                pa.menu(
-                    "BeanLab Admin Potato",
-                    "Set all stats",
-                    "Wipe inventory",
-                    "Spawn item",
-                    "Teleports",
-                    "My position",
-                    "Set my modlevel",
-                    "Kick me",
-                    "Reboot world",
-                    "Slow reboot",
-                    "Done",
-                )
-            logger.info { "[potato] player ${pa.player.displayName} chose $choice" }
-            // Close the menu modal before any follow-up prompt. Otherwise stringDialog
-            // captures the menu as its expected modal, and when that modal closes RsMod
-            // aborts the input (ProtectedAccessLostException, swallowed silently).
-            pa.ifClose()
-            when (choice) {
-                0 -> pa.setAllStats()
-                1 -> pa.wipeInventory()
-                2 -> pa.spawnItem()
-                3 -> pa.openTeleportMenu()
-                4 -> pa.myPosition()
-                5 -> pa.setMyModlevel()
-                6 -> pa.kickMe()
-                7 -> pa.rebootWorld()
-                8 -> pa.slowReboot()
-            }
+            mes("The potato crumbles to dust in your hands.")
+            return
         }
+        val allowed = actions.filter { player.modLevel.hasAccessTo(it.level) }
+        val choice =
+            menu("BeanLab Admin Potato", hotkeys = false, allowed.map { it.label } + "Done")
+        logger.info { "[potato] ${player.displayName} chose ${allowed.getOrNull(choice)?.label}" }
+        // Close the menu modal before any follow-up prompt. Otherwise stringDialog captures the
+        // menu as its expected modal, and when that modal closes RsMod aborts the input
+        // (ProtectedAccessLostException, swallowed silently).
+        ifClose()
+        val picked = allowed.getOrNull(choice) ?: return
+        if (!player.modLevel.hasAccessTo(picked.level)) {
+            mes("You no longer have access to that.")
+            return
+        }
+        picked.action(this)
     }
 
     // ---------------- menu actions (ProtectedAccess receiver) ----------------
@@ -165,13 +174,20 @@ constructor(private val statTypes: StatTypeList, private val modLevelTypes: ModL
     }
 
     private suspend fun ProtectedAccess.setMyModlevel() {
-        when (menu("Set my modlevel", "player", "moderator", "admin", "owner", "cancel")) {
-            0 -> player.modLevel = modLevelTypes[modlevels.player]
-            1 -> player.modLevel = modLevelTypes[modlevels.moderator]
-            2 -> player.modLevel = modLevelTypes[modlevels.admin]
-            3 -> player.modLevel = modLevelTypes[modlevels.owner]
-        }
-        mes("Modlevel now ${player.modLevel}.")
+        // Only levels up to your own: an admin can step down but never promote themselves.
+        val levels =
+            listOf(
+                    "player" to modlevels.player,
+                    "moderator" to modlevels.moderator,
+                    "admin" to modlevels.admin,
+                    "owner" to modlevels.owner,
+                )
+                .filter { (_, level) -> player.modLevel.hasAccessTo(level) }
+        val choice = menu("Set my modlevel", hotkeys = false, levels.map { it.first } + "Cancel")
+        val (name, level) = levels.getOrNull(choice) ?: return
+        player.modLevel = modLevelTypes[level]
+        logger.info { "[potato] ${player.displayName} set own modlevel to $name" }
+        mes("Modlevel now $name.")
     }
 
     private suspend fun ProtectedAccess.kickMe() {

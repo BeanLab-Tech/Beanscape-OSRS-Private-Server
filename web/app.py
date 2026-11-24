@@ -15,6 +15,7 @@ Account creation mirrors Ned's registration bot exactly:
 
 from __future__ import annotations
 
+import html
 import json
 import logging
 import pathlib
@@ -211,9 +212,12 @@ async def status() -> dict[str, Any]:
 
 # ---------------------------------------------------------------- oauth
 
+STATE_COOKIE = "beanlab_oauth_state"
+
+
 @app.get("/oauth/discord/start")
 async def oauth_start() -> RedirectResponse:
-    state = secrets.token_urlsafe(16)
+    state = secrets.token_urlsafe(32)
     url = (
         "https://discord.com/oauth2/authorize"
         f"?client_id={CFG.discord_client_id}"
@@ -223,13 +227,30 @@ async def oauth_start() -> RedirectResponse:
         f"&state={state}"
         "&prompt=consent"
     )
-    # no server-side session store yet (Phase 1): state travels in the redirect
-    # query; the callback accepts any state (single-user server, tailnet).
-    return RedirectResponse(url)
+    # CSRF protection without a session store: the state also goes in an HttpOnly cookie, and the
+    # callback only proceeds when the query state matches it. SameSite=Lax still sends the cookie
+    # on Discord's top-level redirect back to us.
+    resp = RedirectResponse(url)
+    resp.set_cookie(
+        STATE_COOKIE,
+        state,
+        max_age=600,
+        httponly=True,
+        samesite="lax",
+        secure=CFG.redirect_uri.startswith("https://"),
+        path="/oauth/discord",
+    )
+    return resp
 
 
 @app.get("/oauth/discord/callback")
-async def oauth_callback(request: Request, code: str, state: str = None) -> HTMLResponse:
+async def oauth_callback(request: Request, code: str, state: str = "") -> HTMLResponse:
+    expected = request.cookies.get(STATE_COOKIE, "")
+    if not state or not expected or not secrets.compare_digest(state, expected):
+        log.warning("oauth callback rejected: missing or mismatched state")
+        raise HTTPException(
+            400, "Sign-in link expired or invalid. Start again from the registration page."
+        )
     async with httpx.AsyncClient(timeout=15) as client:
         tok = await client.post(
             "https://discord.com/api/oauth2/token",
@@ -257,12 +278,14 @@ async def oauth_callback(request: Request, code: str, state: str = None) -> HTML
     password = "".join(secrets.choice(ALLOWED_PASSWORD_CHARS) for _ in range(16))
     result = register_account(username, password, discord_id, global_name)
 
+    # Discord names are user-controlled: escape everything that goes into the page.
+    e_user, e_name, e_pw = html.escape(username), html.escape(global_name), html.escape(password)
     if result == "ok":
         body = f"""<h1>Registered!</h1>
-<p>Account <b>{username}</b> is ready (Discord: {global_name}).</p>
-<p>Password: <code>{password}</code></p>
-<p>Connect with <b>RSProx</b> (target: <b>BeanLab OSRS</b>), log in with that
-username and password, and choose the <b>dev</b> realm on first login.</p>
+<p>Account <b>{e_user}</b> is ready (Discord: {e_name}).</p>
+<p>Password: <code>{e_pw}</code></p>
+<p>Launch the BeanLab client (Microbot, or RSProx with target <b>BeanLab OSRS</b>) and log in
+with that username and password. Save the password now: it is only shown once.</p>
 <p class="muted">Change the password in-game later if you like.</p>"""
     elif result == "taken":
         conn = db_connect()
@@ -274,24 +297,27 @@ username and password, and choose the <b>dev</b> realm on first login.</p>
             conn.close()
         if row and row[0]:
             body = f"""<h1>Already registered</h1>
-<p>Your Discord account is bound to <b>{row[0]}</b>. Use that username with
+<p>Your Discord account is bound to <b>{html.escape(row[0])}</b>. Use that username with
 the password shown when you first registered.</p>"""
         else:
             body = f"""<h1>Already registered</h1>
-<p>Account <b>{username}</b> already exists but isn't bound to this Discord
+<p>Account <b>{e_user}</b> already exists but isn't bound to this Discord
 account (probably registered via the Discord bot). Use that username with
 its original password.</p>"""
     else:
         body = f"""<h1>Registration error</h1>
-<p><code>{result}</code> — check the server log. Your Discord account
-({global_name}) is bound once the name becomes available.</p>"""
-    return HTMLResponse(
+<p><code>{html.escape(result)}</code> — check the server log. Your Discord account
+({e_name}) is bound once the name becomes available.</p>"""
+    resp = HTMLResponse(
         f"<!doctype html><html><head><meta charset='utf-8'><title>BeanLab OSRS</title>"
         f"<style>body{{font-family:system-ui,sans-serif;max-width:640px;margin:4rem auto;"
         f"padding:0 1rem;line-height:1.6}}code{{background:#f1f1f1;padding:2px 6px;"
         f"border-radius:4px}}.muted{{color:#666;font-size:.85rem}}</style></head><body>"
         f"{body}</body></html>"
     )
+    resp.delete_cookie(STATE_COOKIE, path="/oauth/discord")  # state is single-use
+    resp.headers["Cache-Control"] = "no-store"  # page may contain a password
+    return resp
 
 
 if __name__ == "__main__":
