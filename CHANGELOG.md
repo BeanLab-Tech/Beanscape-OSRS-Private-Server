@@ -4,6 +4,14 @@ Bug fixes for the Beanscape server, launcher, and admin plugin. Add new entries 
 
 ## 2026-11-25
 
+### Admin console showed offline after a restart
+
+The in-client admin API was switched off by the `ADMIN_API_ENABLED=false` systemd drop-in, which only took effect when the server restarted after the Reboot action. The drop-in in `deploy/systemd/osrs-server.service.d/admin-api.conf` is now `true`, so the console comes back online with the next deploy. It still listens on 127.0.0.1:8087 only.
+
+### Soul Wars portal at the Grand Exchange
+
+New module `beanlab-soulwars`. RsMod has no Soul Wars content, so the cache's `soul_wars_edgeville_portal` was never placed or handled. It is now spawned at the Grand Exchange (3165, 3489) and teleports to a blank 100x100 walkable arena at (9024-9123, 3072-3171), well outside every real map square. Its flat terrain (four map squares, `m141_48` to `m142_49`, plus empty `l` files) is packed into the cache by the module's `MapTileBuilder` and `MapLocSpawnBuilder`, so the client has ground to draw. Its edges are blocked, and a Soul Wars leave portal inside returns to the Exchange. To deploy, stop `osrs-server`, run `./gradlew packCache` in the VM checkout, then start the server. Without the pack step the portal works but the arena draws as void.
+
 ### Launcher and plugins now live in the GitHub repo
 
 The launcher (`client/launcher`), the Admin plugin (`client/microbot/admin-plugin`) and the Companion plugin (`client/microbot/companion-plugin`) are now committed to `main` of the server repo, alongside the server content modules from the entries below. `CHANGELOG.md` sits at the repo root and the Updates tab finds it there or in the old workspace layout. The client files keep the pinned Microbot 2.0.20; main's Microbot 2.6.65 update was not taken because it cannot finish the JS5 handshake on revision 233. Run `git pull` in the repo to stay current.
