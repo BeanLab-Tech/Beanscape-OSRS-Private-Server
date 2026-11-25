@@ -1,0 +1,7 @@
+{
+  "source": "INCOMPLETE: only ids whose colour is known without the VM. Regenerate the full list with: python web/tools/import_underlay_probe.py probe.out > web/static/underlay_colors.json (probe.out is /tmp/probe.out on the VM, lines like 'PROBE UNDERLAY id=71 rgb=030303 tex=-1').",
+  "complete": false,
+  "underlays": [
+    { "id": 71, "rgb": "030303", "tex": -1 }
+  ]
+}

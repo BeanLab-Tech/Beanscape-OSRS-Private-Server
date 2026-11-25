@@ -1,0 +1,400 @@
+{% extends "base.html" %}
+{% block title %}Market Hub editor{% endblock %}
+{% block extra_style %}
+<style>
+.main { max-width: none; }
+.hub { display: grid; grid-template-columns: 150px minmax(0, auto) 330px; gap: 1rem; align-items: start; }
+.hub .toolcol { display: flex; flex-direction: column; gap: .35rem; }
+.hub .toolcol .btn { text-align: left; }
+.btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.canvas-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: .5rem; overflow: auto; max-height: 82vh; }
+canvas { display: block; image-rendering: pixelated; cursor: crosshair; }
+.side .card { padding: .75rem; margin-bottom: .75rem; }
+.swatches { display: flex; flex-wrap: wrap; gap: .3rem; }
+.sw { width: 26px; height: 26px; border-radius: 4px; border: 2px solid var(--border); cursor: pointer; }
+.sw.sel { border-color: #fff; outline: 2px solid var(--accent); }
+.problems li { font-size: .8rem; color: var(--danger); margin-left: 1rem; }
+.needs { font-size: .85rem; }
+.insp .form-group { margin-bottom: .5rem; }
+.insp input, .insp select { padding: .25rem .4rem; font-size: .8rem; }
+.row4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: .3rem; }
+.status { font-size: .8rem; color: var(--muted); margin-top: .25rem; min-height: 1.2em; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="flex-between mb-1">
+  <h1>Market Hub editor</h1>
+  <div class="btn-group">
+    <button class="btn btn-sm" id="undo" title="Ctrl+Z">Undo</button>
+    <button class="btn btn-sm" id="redo" title="Ctrl+Y">Redo</button>
+    <button class="btn btn-sm" id="reload">Reload from server</button>
+    <button class="btn btn-sm btn-primary" id="save">Save</button>
+  </div>
+</div>
+<div class="hub">
+  <div class="toolcol" id="tools"></div>
+  <div>
+    <div class="canvas-wrap"><canvas id="cv"></canvas></div>
+    <div class="status" id="status"></div>
+    <div class="small muted">Z grows north: north is at the top. Coordinates are arena tiles 0..<span id="sizeLbl">99</span>.
+      Delete removes the selection, arrow keys nudge it, drag moves it.</div>
+  </div>
+  <div class="side">
+    <div class="card"><h3>Changes need</h3><div class="needs" id="needs">Loading…</div>
+      <div class="small muted mt-1">Floors: terrain regenerate + cache repack + restart. Walls, locs, NPCs, arrival, leave portal: restart only.</div></div>
+    <div class="card"><h3>Validation</h3><div id="problems" class="small muted">Not checked yet</div></div>
+    <div class="card"><h3>Floor palette</h3>
+      <div class="swatches" id="palette"></div>
+      <div class="small mt-1">Ground: <select id="ground" style="width:auto"></select></div>
+      <div class="small mt-1">Add underlay <input id="addId" type="number" min="0" max="173" placeholder="id" style="width:70px;display:inline-block">
+        <input id="addName" placeholder="name" style="width:90px;display:inline-block">
+        <button class="btn btn-sm" id="addPal">Add</button></div>
+      <div class="swatches mt-1" id="underlays"></div>
+    </div>
+    <div class="card insp"><h3>Selection</h3><div id="insp" class="small muted">Nothing selected</div></div>
+    <div class="card"><h3>Tool options</h3>
+      <div class="form-group"><label>Floor layer (floor tool)</label>
+        <select id="layer"><option value="floors">floors (base)</option><option value="detail">detail (on top of rooms)</option></select></div>
+      <div class="form-group"><label>Wall loc (rooms, wall runs)</label><input id="wallLoc" value="blackpaintedbrickwall_1" list="locNames"></div>
+      <div class="form-group"><label>Loc name / shape / angle</label>
+        <input id="locName" value="noticeboard" list="locNames">
+        <select id="locShape"></select><select id="locAngle"></select></div>
+      <div class="form-group"><label>NPC name</label><input id="npcName" value="zeke" list="npcNames"></div>
+      <div class="form-group"><label>Wall run angle</label><select id="wallAngle"></select></div>
+      <datalist id="locNames"></datalist><datalist id="npcNames"></datalist>
+    </div>
+  </div>
+</div>
+<script>
+(() => {
+const API = '/admin/api/hub';
+let L = null, etag = null, source = '', needs = null;
+let underlays = {}, shapes = [], angles = [];
+let curFloor = null, tool = 'select', sel = null, cell = 8;
+let undo = [], redo = [], dirty = false;
+let drag = null, vTimer = null;
+const $ = id => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d');
+const TOOLS = [['select','Select / move'],['floor','Floor rect'],['room','Room'],['door','Door (click room edge)'],
+  ['wall','Wall run'],['loc','Loc'],['npc','NPC'],['arrival','Arrival tile'],['leave','Leave portal']];
+
+const clone = o => JSON.parse(JSON.stringify(o));
+function pushUndo() { undo.push(JSON.stringify(L)); if (undo.length > 200) undo.shift(); redo = []; }
+function changed() { dirty = true; draw(); scheduleValidate(); refreshUi(); }
+function commit(fn) { pushUndo(); fn(); changed(); }
+
+// ---- colours
+function hexFor(id) { const u = underlays[id]; return u ? '#' + u.rgb : null; }
+function colorOf(name) {
+  const id = L.palette[name]; const h = hexFor(id);
+  if (h) return h;
+  const g = (id * 47) % 256; return `rgb(${g},${(g * 3) % 256},${255 - g})`; // unknown underlay: placeholder
+}
+
+// ---- geometry helpers
+const X = (x) => x * cell, Y = (z) => (L.size - 1 - z) * cell;
+function cellAt(ev) {
+  const r = cv.getBoundingClientRect();
+  const x = Math.floor((ev.clientX - r.left) / cell), row = Math.floor((ev.clientY - r.top) / cell);
+  return { x: Math.max(0, Math.min(L.size - 1, x)), z: Math.max(0, Math.min(L.size - 1, L.size - 1 - row)) };
+}
+const norm = (a, b) => [Math.min(a.x, b.x), Math.min(a.z, b.z), Math.max(a.x, b.x), Math.max(a.z, b.z)];
+const inRect = (r, p) => p.x >= r[0] && p.x <= r[2] && p.z >= r[1] && p.z <= r[3];
+
+// ---- drawing
+function fillRect(r, color) { ctx.fillStyle = color; ctx.fillRect(X(r[0]), Y(r[3]), (r[2]-r[0]+1)*cell, (r[3]-r[1]+1)*cell); }
+function wallTiles(room) {
+  const [x0,z0,x1,z1] = room.rect, out = [];
+  const open = (s, c) => (room.doors||[]).some(d => d.side.toLowerCase() === s && c >= d.from && c <= d.to);
+  for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
+    const w = x===x0, e = x===x1, s = z===z0, n = z===z1;
+    if (!(w||e||s||n)) continue;
+    if ((w||e) && (n||s)) out.push([x,z,'corner']);
+    else if (w) { if (!open('west', z)) out.push([x,z,'west']); }
+    else if (e) { if (!open('east', z)) out.push([x,z,'east']); }
+    else if (s) { if (!open('south', x)) out.push([x,z,'south']); }
+    else if (n) { if (!open('north', x)) out.push([x,z,'north']); }
+  }
+  return out;
+}
+function draw() {
+  if (!L) return;
+  cv.width = cv.height = L.size * cell;
+  fillRect([0,0,L.size-1,L.size-1], colorOf(L.ground));
+  for (const p of L.floors||[]) fillRect(p.rect, colorOf(p.floor));
+  for (const r of L.rooms||[]) fillRect(r.rect, colorOf(r.floor));
+  for (const p of L.detail||[]) fillRect(p.rect, colorOf(p.floor));
+  if (cell >= 6) { ctx.strokeStyle = 'rgba(255,255,255,.06)'; ctx.lineWidth = 1; ctx.beginPath();
+    for (let i = 0; i <= L.size; i += 10) { ctx.moveTo(i*cell+.5,0); ctx.lineTo(i*cell+.5,L.size*cell); ctx.moveTo(0,i*cell+.5); ctx.lineTo(L.size*cell,i*cell+.5); }
+    ctx.stroke(); }
+  // walls
+  const wallStyle = (x, z, kind, col) => { ctx.fillStyle = col; const t = Math.max(2, cell/3);
+    const px = X(x), py = Y(z);
+    if (kind==='corner') ctx.fillRect(px, py, cell, cell);
+    else if (kind==='west') ctx.fillRect(px, py, t, cell);
+    else if (kind==='east') ctx.fillRect(px+cell-t, py, t, cell);
+    else if (kind==='north') ctx.fillRect(px, py, cell, t);
+    else if (kind==='south') ctx.fillRect(px, py+cell-t, cell, t); };
+  for (const r of L.rooms||[]) for (const [x,z,k] of wallTiles(r)) wallStyle(x,z,k,'#d8d8e8');
+  for (const w of L.walls||[]) for (let x=w.line[0]; x<=w.line[2]; x++) for (let z=w.line[1]; z<=w.line[3]; z++)
+    wallStyle(x,z,(w.angle||'north').toLowerCase(),'#f0c060');
+  for (const l of L.locs||[]) { ctx.fillStyle = '#4ad0ff'; ctx.fillRect(X(l.x)+cell*.25, Y(l.z)+cell*.25, cell*.5, cell*.5); }
+  for (const n of L.npcs||[]) { ctx.fillStyle = '#ff7ab8'; ctx.beginPath(); ctx.arc(X(n.x)+cell/2, Y(n.z)+cell/2, cell*.38, 0, 7); ctx.fill(); }
+  const a = L.arrival; ctx.strokeStyle = '#3cff8a'; ctx.lineWidth = 2; ctx.strokeRect(X(a.x)+1, Y(a.z)+1, cell-2, cell-2);
+  ctx.beginPath(); ctx.moveTo(X(a.x), Y(a.z)); ctx.lineTo(X(a.x)+cell, Y(a.z)+cell); ctx.moveTo(X(a.x)+cell, Y(a.z)); ctx.lineTo(X(a.x), Y(a.z)+cell); ctx.stroke();
+  const p = L.leavePortal; ctx.strokeStyle = '#c070ff'; ctx.strokeRect(X(p.x)+1, Y(p.z+2)+1, cell*3-2, cell*3-2);
+  // room labels
+  if (cell >= 6) { ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.font = `${Math.max(9, cell*1.2)}px sans-serif`;
+    for (const r of L.rooms||[]) ctx.fillText(r.name, X(r.rect[0])+cell*1.5, Y(r.rect[3])+cell*2.4); }
+  // selection and drag preview
+  if (sel) { const b = bounds(sel); if (b) { ctx.strokeStyle = '#fff'; ctx.setLineDash([4,3]); ctx.lineWidth = 2;
+    ctx.strokeRect(X(b[0])-1, Y(b[3])-1, (b[2]-b[0]+1)*cell+2, (b[3]-b[1]+1)*cell+2); ctx.setLineDash([]); } }
+  if (drag && drag.rect) { ctx.strokeStyle = '#fff'; ctx.setLineDash([3,3]); const r = drag.rect;
+    ctx.strokeRect(X(r[0])+.5, Y(r[3])+.5, (r[2]-r[0]+1)*cell, (r[3]-r[1]+1)*cell); ctx.setLineDash([]); }
+}
+
+// ---- items: {kind, i}
+function itemList(kind) { return L[kind] || (L[kind] = []); }
+function bounds(s) {
+  const o = s.kind==='arrival' ? L.arrival : s.kind==='leavePortal' ? L.leavePortal : (L[s.kind]||[])[s.i];
+  if (!o) return null;
+  if (s.kind==='arrival') return [o.x,o.z,o.x,o.z];
+  if (s.kind==='leavePortal') return [o.x,o.z,o.x+2,o.z+2];
+  if (o.rect) return o.rect;
+  if (o.line) return o.line;
+  return [o.x,o.z,o.x,o.z];
+}
+function hit(p) {
+  const order = ['npcs','locs','walls'];
+  for (const k of order) { const l = L[k]||[]; for (let i=l.length-1;i>=0;i--) if (inRect(bounds({kind:k,i}), p)) return {kind:k,i}; }
+  if (inRect(bounds({kind:'arrival'}), p)) return {kind:'arrival'};
+  if (inRect(bounds({kind:'leavePortal'}), p)) return {kind:'leavePortal'};
+  for (const k of ['detail','rooms','floors']) { const l = L[k]||[]; for (let i=l.length-1;i>=0;i--) if (inRect(l[i].rect, p)) return {kind:k,i}; }
+  return null;
+}
+function moveItem(s, dx, dz, base) {
+  const o = s.kind==='arrival' ? L.arrival : s.kind==='leavePortal' ? L.leavePortal : L[s.kind][s.i];
+  const b = base;
+  const cl = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  if (o.rect || o.line) {
+    const key = o.rect ? 'rect' : 'line', w = b[2]-b[0], h = b[3]-b[1];
+    const x0 = cl(b[0]+dx, 0, L.size-1-w), z0 = cl(b[1]+dz, 0, L.size-1-h);
+    const ddx = x0-b[0], ddz = z0-b[1];
+    o[key] = [x0, z0, b[2]+ddx, b[3]+ddz];
+    if (s.kind==='rooms') for (const d of o.doors||[]) { const v = d.side==='west'||d.side==='east'; const dd = v?ddz:ddx; d.from = base.doors[o.doors.indexOf(d)].from+dd; d.to = base.doors[o.doors.indexOf(d)].to+dd; }
+  } else {
+    const w = s.kind==='leavePortal' ? 2 : 0;
+    o.x = cl(b[0]+dx, 0, L.size-1-w); o.z = cl(b[1]+dz, 0, L.size-1-w);
+  }
+}
+function snapshotBase(s) {
+  const o = s.kind==='arrival' ? L.arrival : s.kind==='leavePortal' ? L.leavePortal : L[s.kind][s.i];
+  const b = clone(bounds(s)); if (s.kind==='rooms') b.doors = clone(o.doors||[]); return b;
+}
+
+// ---- pointer handling
+let down = null;
+cv.addEventListener('mousedown', ev => {
+  const p = cellAt(ev); down = p; drag = null;
+  if (tool === 'select') {
+    const h = hit(p); sel = h; refreshUi(); draw();
+    if (h) { drag = { move: true, start: p, base: snapshotBase(h), pushed: false, item: h }; }
+  } else if (['floor','room','wall'].includes(tool)) {
+    drag = { start: p, rect: norm(p, p) };
+  } else if (tool === 'door') {
+    addDoorAt(p);
+  } else if (tool === 'loc') {
+    commit(() => { itemList('locs').push({ loc: $('locName').value.trim(), x: p.x, z: p.z, shape: $('locShape').value, angle: $('locAngle').value }); sel = {kind:'locs', i: L.locs.length-1}; });
+  } else if (tool === 'npc') {
+    commit(() => { itemList('npcs').push({ npc: $('npcName').value.trim(), x: p.x, z: p.z }); sel = {kind:'npcs', i: L.npcs.length-1}; });
+  } else if (tool === 'arrival') { commit(() => { L.arrival = { x: p.x, z: p.z }; sel = {kind:'arrival'}; });
+  } else if (tool === 'leave') { commit(() => { L.leavePortal = { x: Math.min(p.x, L.size-3), z: Math.min(p.z, L.size-3) }; sel = {kind:'leavePortal'}; }); }
+});
+window.addEventListener('mousemove', ev => {
+  if (!down) return;
+  const p = cellAt(ev);
+  if (drag && drag.move) {
+    if (p.x===drag.start.x && p.z===drag.start.z && !drag.pushed) return;
+    if (!drag.pushed) { drag.undoSnap = JSON.stringify(L); drag.pushed = true; }
+    moveItem(drag.item, p.x-drag.start.x, p.z-drag.start.z, drag.base); draw();
+  } else if (drag && drag.rect) {
+    let r = norm(drag.start, p);
+    if (tool === 'wall') { // straight line: keep the longer axis
+      const dx = Math.abs(p.x-drag.start.x), dz = Math.abs(p.z-drag.start.z);
+      r = dx >= dz ? norm(drag.start, {x:p.x, z:drag.start.z}) : norm(drag.start, {x:drag.start.x, z:p.z});
+    }
+    drag.rect = r; draw();
+  }
+});
+window.addEventListener('mouseup', () => {
+  if (!down) return; down = null;
+  if (drag && drag.move && drag.pushed) { undo.push(drag.undoSnap); redo = []; drag = null; changed(); refreshUi(); return; }
+  if (drag && drag.rect) {
+    const r = drag.rect; drag = null;
+    commit(() => {
+      if (tool === 'floor') { itemList($('layer').value).push({ rect: r, floor: curFloor }); sel = {kind:$('layer').value, i: L[$('layer').value].length-1}; }
+      else if (tool === 'room') { const n = 'Room ' + (itemList('rooms').length + 1);
+        L.rooms.push({ name: n, rect: r, floor: curFloor, wall: $('wallLoc').value.trim(), doors: [] }); sel = {kind:'rooms', i: L.rooms.length-1}; }
+      else if (tool === 'wall') { itemList('walls').push({ loc: $('wallLoc').value.trim(), line: r, angle: $('wallAngle').value }); sel = {kind:'walls', i: L.walls.length-1}; }
+    });
+    return;
+  }
+  drag = null; draw();
+});
+function addDoorAt(p) {
+  for (let i = 0; i < (L.rooms||[]).length; i++) {
+    const r = L.rooms[i].rect;
+    if (!inRect(r, p)) continue;
+    const w = p.x===r[0], e = p.x===r[2], s = p.z===r[1], n = p.z===r[3];
+    if ((w||e) && (n||s)) { status('Doors cannot sit on a corner'); return; }
+    let side = w?'west':e?'east':s?'south':n?'north':null;
+    if (!side) continue;
+    const v = side==='west'||side==='east', c = v ? p.z : p.x, lo = (v?r[1]:r[0])+1, hi = (v?r[3]:r[2])-1;
+    commit(() => { L.rooms[i].doors = L.rooms[i].doors||[]; L.rooms[i].doors.push({ side, from: Math.max(lo, c-1), to: Math.min(hi, c+1) }); sel = {kind:'rooms', i}; });
+    return;
+  }
+  status('Click a room edge tile to add a door');
+}
+
+// ---- keyboard
+window.addEventListener('keydown', ev => {
+  if (['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) return;
+  if ((ev.ctrlKey||ev.metaKey) && ev.key.toLowerCase()==='z') { ev.preventDefault(); ev.shiftKey ? doRedo() : doUndo(); return; }
+  if ((ev.ctrlKey||ev.metaKey) && ev.key.toLowerCase()==='y') { ev.preventDefault(); doRedo(); return; }
+  if (ev.key === 'Delete' || ev.key === 'Backspace') { deleteSel(); ev.preventDefault(); return; }
+  const d = {ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,1],ArrowDown:[0,-1]}[ev.key];
+  if (d && sel) { ev.preventDefault(); commit(() => moveItem(sel, d[0], d[1], snapshotBase(sel))); }
+});
+function deleteSel() {
+  if (!sel || sel.kind==='arrival' || sel.kind==='leavePortal') return;
+  commit(() => { L[sel.kind].splice(sel.i, 1); sel = null; });
+}
+function doUndo() { if (!undo.length) return; redo.push(JSON.stringify(L)); L = JSON.parse(undo.pop()); sel = null; changed(); }
+function doRedo() { if (!redo.length) return; undo.push(JSON.stringify(L)); L = JSON.parse(redo.pop()); sel = null; changed(); }
+$('undo').onclick = doUndo; $('redo').onclick = doRedo;
+
+// ---- inspector
+function el(tag, attrs = {}, kids = []) { const e = document.createElement(tag); for (const [k,v] of Object.entries(attrs)) { if (k==='on') for (const [ev,fn] of Object.entries(v)) e.addEventListener(ev, fn); else if (k==='text') e.textContent = v; else e.setAttribute(k, v); } kids.forEach(c => e.appendChild(c)); return e; }
+function field(label, input) { return el('div', {class:'form-group'}, [el('label', {text: label}), input]); }
+function textInput(val, set, list) { const i = el('input', {value: val ?? '', ...(list ? {list} : {})}); i.addEventListener('change', () => commit(() => set(i.value))); return i; }
+function numInput(val, set) { const i = el('input', {type:'number', value: val}); i.addEventListener('change', () => commit(() => set(parseInt(i.value, 10)))); return i; }
+function selInput(opts, val, set) { const s = el('select'); opts.forEach(o => { const op = el('option', {value:o, text:o}); if (String(o).toLowerCase() === String(val).toLowerCase()) op.selected = true; s.appendChild(op); }); s.addEventListener('change', () => commit(() => set(s.value))); return s; }
+function rectInputs(o, key) { const w = el('div', {class:'row4'}); ['x0','z0','x1','z1'].forEach((n, k) => { const i = el('input', {type:'number', value:o[key][k], title:n}); i.addEventListener('change', () => commit(() => { o[key][k] = parseInt(i.value, 10); })); w.appendChild(i); }); return field(key + ' (x0 z0 x1 z1, south-west first)', w); }
+function refreshUi() {
+  const box = $('insp'); box.replaceChildren();
+  if (!sel) { box.className = 'small muted'; box.textContent = 'Nothing selected'; renderPalette(); return; }
+  box.className = '';
+  const o = sel.kind==='arrival' ? L.arrival : sel.kind==='leavePortal' ? L.leavePortal : L[sel.kind][sel.i];
+  if (!o) { sel = null; return refreshUi(); }
+  box.appendChild(el('div', {class:'small muted mb-1', text: sel.kind + (sel.i!=null ? ' #' + sel.i : '')}));
+  const floorNames = Object.keys(L.palette);
+  if (o.rect && sel.kind==='rooms') {
+    box.appendChild(field('name', textInput(o.name, v => o.name = v)));
+    box.appendChild(rectInputs(o,'rect'));
+    box.appendChild(field('floor', selInput(floorNames, o.floor, v => o.floor = v)));
+    box.appendChild(field('wall loc', textInput(o.wall, v => o.wall = v, 'locNames')));
+    box.appendChild(el('label', {class:'small muted', text:'doors (side, from, to)'}));
+    (o.doors||[]).forEach((d, di) => {
+      const row = el('div', {class:'row4'});
+      row.appendChild(selInput(['west','east','north','south'], d.side, v => d.side = v));
+      row.appendChild(numInput(d.from, v => d.from = v)); row.appendChild(numInput(d.to, v => d.to = v));
+      row.appendChild(el('button', {class:'btn btn-sm btn-danger', text:'x', on:{click: () => commit(() => o.doors.splice(di,1))}}));
+      box.appendChild(row);
+    });
+    box.appendChild(el('button', {class:'btn btn-sm mt-1', text:'Add door', on:{click: () => commit(() => { (o.doors = o.doors||[]).push({side:'west', from:o.rect[1]+1, to:o.rect[1]+3}); })}}));
+  } else if (o.rect) {
+    box.appendChild(rectInputs(o,'rect')); box.appendChild(field('floor', selInput(floorNames, o.floor, v => o.floor = v)));
+  } else if (o.line) {
+    box.appendChild(rectInputs(o,'line')); box.appendChild(field('loc', textInput(o.loc, v => o.loc = v, 'locNames')));
+    box.appendChild(field('angle', selInput(angles, o.angle, v => o.angle = v)));
+  } else if (sel.kind==='locs') {
+    box.appendChild(field('loc', textInput(o.loc, v => o.loc = v, 'locNames')));
+    box.appendChild(field('shape', selInput(shapes, o.shape, v => o.shape = v)));
+    box.appendChild(field('angle', selInput(angles, o.angle, v => o.angle = v)));
+    box.appendChild(field('x', numInput(o.x, v => o.x = v))); box.appendChild(field('z', numInput(o.z, v => o.z = v)));
+  } else if (sel.kind==='npcs') {
+    box.appendChild(field('npc', textInput(o.npc, v => o.npc = v, 'npcNames')));
+    box.appendChild(field('x', numInput(o.x, v => o.x = v))); box.appendChild(field('z', numInput(o.z, v => o.z = v)));
+  } else {
+    box.appendChild(field('x', numInput(o.x, v => o.x = v))); box.appendChild(field('z', numInput(o.z, v => o.z = v)));
+    if (sel.kind==='leavePortal') box.appendChild(el('div', {class:'small muted', text:'south-west tile of the 3x3 portal'}));
+  }
+  if (sel.kind!=='arrival' && sel.kind!=='leavePortal') box.appendChild(el('button', {class:'btn btn-sm btn-danger mt-1', text:'Delete', on:{click: deleteSel}}));
+  renderPalette();
+}
+function renderPalette() {
+  const pal = $('palette'); pal.replaceChildren();
+  for (const name of Object.keys(L.palette)) {
+    const s = el('div', {class:'sw' + (name===curFloor ? ' sel' : ''), title: `${name} (underlay ${L.palette[name]}${underlays[L.palette[name]] ? '' : ', colour unknown'})`});
+    s.style.background = colorOf(name);
+    s.addEventListener('click', () => { curFloor = name; renderPalette(); });
+    pal.appendChild(s);
+  }
+  const g = $('ground'); g.replaceChildren();
+  for (const n of Object.keys(L.palette)) { const op = el('option', {value:n, text:n}); if (n===L.ground) op.selected = true; g.appendChild(op); }
+}
+$('ground').addEventListener('change', e => commit(() => L.ground = e.target.value));
+$('addPal').onclick = () => { const id = parseInt($('addId').value, 10), name = $('addName').value.trim();
+  if (!name || !(id >= 0 && id <= 173)) return status('Need a name and an underlay id 0..173');
+  commit(() => { L.palette[name] = id; curFloor = name; }); };
+function renderUnderlays() {
+  const box = $('underlays'); box.replaceChildren();
+  Object.values(underlays).forEach(u => { const s = el('div', {class:'sw', title:`underlay ${u.id}`});
+    s.style.background = '#' + u.rgb; s.addEventListener('click', () => { $('addId').value = u.id; $('addName').focus(); }); box.appendChild(s); });
+}
+
+// ---- server
+function status(msg) { $('status').textContent = msg; }
+function scheduleValidate() { clearTimeout(vTimer); vTimer = setTimeout(validate, 300); }
+async function validate() {
+  try {
+    const r = await fetch(API + '/validate', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({layout: L}) });
+    if (r.status === 401) return status('Signed out: reload the page to sign in again');
+    const j = await r.json(); showProblems(j.problems); showNeeds(j.needs);
+  } catch (e) { status('Validation failed: ' + e); }
+}
+function showProblems(list) {
+  const box = $('problems'); box.replaceChildren();
+  if (!list.length) { box.className = 'small'; box.textContent = 'Valid'; box.style.color = 'var(--success)'; return; }
+  box.className = 'small'; box.style.color = '';
+  const ul = el('ul', {class:'problems'}); list.forEach(p => ul.appendChild(el('li', {text:p}))); box.appendChild(ul);
+}
+function showNeeds(n) {
+  needs = n; const box = $('needs');
+  box.textContent = n.summary === 'none' ? 'Nothing: identical to the saved layout.'
+    : n.needs_repack ? 'Terrain regenerate + cache repack + restart (floors: ' + n.repack.join(', ') + ')'
+    : 'Server restart only (' + n.restart.join(', ') + ')';
+}
+async function load() {
+  const [u, l] = await Promise.all([fetch(API + '/underlays'), fetch(API + '/layout')]);
+  if (u.status === 401 || l.status === 401) { location.href = '/admin/login'; return; }
+  const uj = await u.json(); underlays = {}; (uj.underlays||[]).forEach(x => underlays[x.id] = x);
+  shapes = uj.shapes; angles = uj.angles;
+  for (const [id, arr, dflt] of [['locShape', shapes, 'WallDecorStraightNoOffset'], ['locAngle', angles, 'north'], ['wallAngle', angles, 'north']]) {
+    const s = $(id); s.replaceChildren(); arr.forEach(v => { const op = el('option', {value:v, text:v}); if (v===dflt) op.selected = true; s.appendChild(op); }); }
+  const lj = await l.json(); L = lj.layout; etag = lj.etag; source = lj.source;
+  L.floors = L.floors||[]; L.detail = L.detail||[]; L.rooms = L.rooms||[]; L.walls = L.walls||[]; L.locs = L.locs||[]; L.npcs = L.npcs||[];
+  undo = []; redo = []; sel = null; dirty = false;
+  curFloor = Object.keys(L.palette)[0]; $('sizeLbl').textContent = L.size - 1;
+  const lnames = new Set(), nnames = new Set();
+  L.rooms.forEach(r => lnames.add(r.wall)); L.walls.forEach(w => lnames.add(w.loc)); L.locs.forEach(x => lnames.add(x.loc)); L.npcs.forEach(n => nnames.add(n.npc));
+  $('locNames').replaceChildren(...[...lnames].map(v => el('option', {value:v}))); $('npcNames').replaceChildren(...[...nnames].map(v => el('option', {value:v})));
+  cell = Math.max(4, Math.min(10, Math.floor(820 / L.size)));
+  renderUnderlays(); renderPalette(); showProblems(lj.problems); draw(); refreshUi(); validate();
+  status(`Loaded the ${source} layout.` + (Object.keys(underlays).length < 2 ? ' Underlay colours are incomplete (see web/tools/import_underlay_probe.py): unknown ids show placeholder colours.' : ''));
+}
+$('reload').onclick = () => { if (!dirty || confirm('Discard unsaved changes?')) load(); };
+$('save').onclick = async () => {
+  const r = await fetch(API + '/layout', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({layout: L, base_etag: etag}) });
+  const j = await r.json().catch(() => ({}));
+  if (r.ok) { etag = j.etag; dirty = false; showProblems([]); status('Saved to ' + j.path + (j.backup ? ' (backup ' + j.backup.split(/[\\/]/).pop() + ')' : '') + '. ' + (j.needs.needs_repack ? 'Needs terrain regenerate + cache repack + restart.' : j.needs.needs_restart ? 'Restart osrs-server to apply.' : 'No changes.')); source = 'override'; validate(); }
+  else { showProblems(j.problems || [j.detail || ('HTTP ' + r.status)]); status('Not saved.'); }
+};
+window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+// tool buttons
+TOOLS.forEach(([id, label]) => { const b = el('button', {class:'btn btn-sm' + (id===tool ? ' on' : ''), 'data-tool': id, text: label, on:{click: () => { tool = id; document.querySelectorAll('#tools .btn').forEach(x => x.classList.toggle('on', x.dataset.tool === id)); status(''); }}}); $('tools').appendChild(b); });
+window.__hub = { get layout() { return L; }, load };
+load();
+})();
+</script>
+{% endblock %}

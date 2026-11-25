@@ -20,11 +20,12 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
+import hub_layout
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 BASE = pathlib.Path(__file__).resolve().parent
-CONFIG_PATH = BASE / "admin_config.json"
+CONFIG_PATH = pathlib.Path(os.environ.get("OSRS_ADMIN_CONFIG", str(BASE / "admin_config.json")))
 TEMPLATES_DIR = BASE / "admin_templates"
 
 # fine_xp = xp * XP_FINE_PRECISION (see PlayerStatMap.XP_FINE_PRECISION = 10)
@@ -96,6 +97,10 @@ class AdminConfig:
         # Game accounts allowed to sign in to the panel (must also be unbanned owners). Editable only
         # on the VM, so a game modlevel alone never grants panel access.
         self.panel_users = {str(u).strip().lower() for u in raw.get("panel_users", [])}
+        # Game server checkout holding the Market Hub layout (bundled file + .data override).
+        self.hub_server_dir = raw.get("hub_server_dir", "/opt/osrs/server/rsmod")
+        # Optional explicit override path (same meaning as the server's HUB_LAYOUT_FILE).
+        self.hub_layout_file = raw.get("hub_layout_file") or os.environ.get("HUB_LAYOUT_FILE")
 
     @classmethod
     def load(cls) -> "AdminConfig":
@@ -856,6 +861,110 @@ async def update_realm(realm_id: int, request: Request) -> RedirectResponse:
         conn.close()
     log.info("updated realm %d by %s", realm_id, admin)
     return RedirectResponse("/admin/realms", status_code=302)
+
+
+# --- market hub layout editor ---
+UNDERLAY_COLORS = BASE / "static" / "underlay_colors.json"
+
+
+def hub_store() -> hub_layout.HubLayoutStore:
+    bundled = BASE.parent / hub_layout.BUNDLED_RELATIVE
+    store = hub_layout.HubLayoutStore(CFG.hub_server_dir, override=CFG.hub_layout_file or None)
+    if not store.bundled.is_file() and bundled.is_file():
+        store.bundled = bundled  # running from a repo checkout instead of the VM
+    return store
+
+
+def require_admin_api(request: Request) -> str:
+    """Like require_admin, but a JSON 401 instead of a redirect to the login page."""
+    try:
+        return require_admin(request)
+    except HTTPException as e:
+        if e.status_code == 307:
+            raise HTTPException(status_code=401, detail="not signed in")
+        raise
+
+
+def _layout_from_body(body: Any) -> dict:
+    layout = body.get("layout") if isinstance(body, dict) and "layout" in body else body
+    if not isinstance(layout, dict):
+        raise HTTPException(status_code=400, detail="body must be a layout object")
+    return layout
+
+
+@app.get("/admin/hub", response_class=HTMLResponse)
+async def hub_editor_page(request: Request) -> HTMLResponse:
+    admin = require_admin(request)
+    return render("hub_editor.html", request, {"admin": admin, "active_nav": "hub"})
+
+
+@app.get("/admin/api/hub/underlays")
+async def hub_underlays(request: Request) -> JSONResponse:
+    require_admin_api(request)
+    try:
+        data = json.loads(UNDERLAY_COLORS.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = {"underlays": []}
+    data["shapes"] = list(hub_layout.SHAPES)
+    data["angles"] = list(hub_layout.ANGLES)
+    return JSONResponse(data)
+
+
+@app.get("/admin/api/hub/layout")
+async def hub_get_layout(request: Request) -> JSONResponse:
+    require_admin_api(request)
+    store = hub_store()
+    try:
+        layout, raw, kind = store.read()
+    except (OSError, ValueError) as e:
+        raise HTTPException(status_code=500, detail=f"cannot read layout: {e}")
+    return JSONResponse({
+        "layout": layout,
+        "source": kind,
+        "etag": store.etag(raw),
+        "problems": hub_layout.validate_layout(layout),
+    })
+
+
+@app.post("/admin/api/hub/validate")
+async def hub_validate(request: Request) -> JSONResponse:
+    """Validates a draft without saving; also says what saving it would need."""
+    require_admin_api(request)
+    layout = _layout_from_body(await request.json())
+    problems = hub_layout.validate_layout(layout)
+    try:
+        current = hub_store().read()[0]
+    except (OSError, ValueError):
+        current = None
+    return JSONResponse({"problems": problems, "needs": hub_layout.classify_changes(current, layout)})
+
+
+@app.put("/admin/api/hub/layout")
+async def hub_put_layout(request: Request) -> JSONResponse:
+    admin = require_admin_api(request)
+    body = await request.json()
+    layout = _layout_from_body(body)
+    problems = hub_layout.validate_layout(layout)
+    if problems:
+        return JSONResponse({"ok": False, "problems": problems}, status_code=422)
+    store = hub_store()
+    base_etag = body.get("base_etag") if isinstance(body, dict) else None
+    try:
+        current, _raw, _kind = store.read()
+        if base_etag and base_etag != store.current_etag():
+            return JSONResponse(
+                {"ok": False, "problems": ["the layout changed on the server since you loaded it; reload first"]},
+                status_code=409,
+            )
+    except (OSError, ValueError):
+        current = None
+    needs = hub_layout.classify_changes(current, layout)
+    try:
+        saved = store.write(layout)
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"cannot write layout: {e}")
+    log.info("hub layout saved by %s (%s)", admin, needs["summary"])
+    return JSONResponse({"ok": True, "problems": [], "needs": needs, **saved})
 
 
 # --- health ---

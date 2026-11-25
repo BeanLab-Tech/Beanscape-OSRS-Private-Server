@@ -113,6 +113,7 @@ input[type="checkbox"] { width: auto; }
       <a href="/admin/characters" class="{{ 'active' if active_nav == 'characters' else '' }}">Characters</a>
       <a href="/admin/items" class="{{ 'active' if active_nav == 'items' else '' }}">Items</a>
       <a href="/admin/realms" class="{{ 'active' if active_nav == 'realms' else '' }}">Realms</a>
+      <a href="/admin/hub" class="{{ 'active' if active_nav == 'hub' else '' }}">Market Hub</a>
     </nav>
     <div class="sidebar-footer">
       Signed in as <b>{{ user.get('user', 'admin') if user else 'admin' }}</b><br>
