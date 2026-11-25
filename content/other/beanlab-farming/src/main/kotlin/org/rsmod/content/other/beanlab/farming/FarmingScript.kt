@@ -438,21 +438,24 @@ constructor(
         if (state.lives <= 0) {
             val bonus = if (crop.harvests > 1) state.compost + random.of(3) else 0
             state = state.copy(lives = crop.harvests + bonus)
+            // Store the rolled harvest count now, so stopping mid-harvest can't re-roll it.
+            save(loc, state)
         }
         while (state.lives > 0) {
             if (inv.isFull()) {
                 mes("You don't have enough inventory space.")
-                save(loc, state)
                 return
             }
             seq(if (needsSpade) "human_dig" else "picking_low")
             delay(2)
+            // Use up the harvest in the stored state before handing out the item, so an
+            // interrupted harvest never pays the same life twice.
+            state = state.copy(lives = state.lives - 1)
+            save(loc, if (state.lives > 0) state else PatchState(weeds = Farming.CLEAR))
             invAdd(inv, product, 1)
             statAdvance(stats.farming, crop.harvestXp * xpMods.get(player, stats.farming))
-            state = state.copy(lives = state.lives - 1)
         }
         resetAnim()
-        save(loc, PatchState(weeds = Farming.CLEAR))
         mes("The patch is now empty.")
     }
 

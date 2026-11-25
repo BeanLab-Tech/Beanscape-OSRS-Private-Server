@@ -116,7 +116,11 @@ build=$(tr -dc '0-9' < "$SRC/client/microbot/CLIENT_BUILD")
 [ -n "$build" ] || { log "client/microbot/CLIENT_BUILD is empty"; exit 1; }
 # The current client's real Microbot version (e.g. 2.6.65). Older builds report the next
 # version up so their title bar shows "(NEW CLIENT AVAILABLE)".
-curver=$(tr -dc '0-9.' < "$SRC/client/microbot/CLIENT_VERSION")
+# CLIENT_VERSION is optional: without it the current build answers the pinned 2.0.20.
+curver=""
+if [ -f "$SRC/client/microbot/CLIENT_VERSION" ]; then
+    curver=$(tr -dc '0-9.' < "$SRC/client/microbot/CLIENT_VERSION")
+fi
 [ -n "$curver" ] || curver="2.0.20"
 as_osrs sh -c '
     set -e

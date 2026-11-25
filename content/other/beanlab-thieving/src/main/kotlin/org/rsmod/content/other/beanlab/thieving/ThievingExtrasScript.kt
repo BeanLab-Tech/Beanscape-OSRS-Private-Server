@@ -132,6 +132,16 @@ constructor(
         delay(1)
         mes("You disable the trap.")
         delay(1)
+        // Another player may have emptied the chest during the delays: only the player who still
+        // finds the full chest gets the loot, and it is emptied before anything is handed out.
+        val full = locTypes[loc.id] ?: return
+        if (locRepo.findExact(loc.coords, full) == null || inv.freeSpace() < chest.loot.size) {
+            mes("The chest is empty.")
+            return
+        }
+        locTypes.values
+            .firstOrNull { it.internalName == chest.empty }
+            ?.let { locRepo.change(loc, it, chest.respawnTicks) }
         for ((name, min, max) in chest.loot) {
             val type = obj(name) ?: continue
             val count = if (max > min) min + random.of(max - min + 1) else min
@@ -139,9 +149,6 @@ constructor(
         }
         statAdvance(stats.thieving, chest.xp * xpMods.get(player, stats.thieving))
         mes("You open the chest and find some treasure.")
-        locTypes.values
-            .firstOrNull { it.internalName == chest.empty }
-            ?.let { locRepo.change(loc, it, chest.respawnTicks) }
     }
 
     private suspend fun ProtectedAccess.springTrap(chest: TrapChest) {
