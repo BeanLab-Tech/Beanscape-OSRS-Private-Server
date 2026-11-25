@@ -2,9 +2,10 @@ package net.runelite.client.plugins.microbot.beanscapeadmin;
 
 import com.google.gson.JsonObject;
 import java.awt.BorderLayout;
-import java.awt.Color;
+import java.awt.CardLayout;
 import java.awt.Dimension;
-import java.awt.GridLayout;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.util.ArrayList;
 import java.util.List;
 import javax.swing.BorderFactory;
@@ -21,20 +22,32 @@ import net.runelite.api.Skill;
 /** Online players on the left; the selected player's details and actions on the right. */
 final class PlayersPage extends Page
 {
-	private final JTextField search = new JTextField();
+	private final JTextField search = new Widgets.SearchField("Search players");
 	private final JPanel list = Ui.clear(null);
 	private final JLabel count = Ui.label(" ", Theme.ui(12f), Theme.TEXT_3);
-	private final JLabel name = Ui.label("Pick a player", Theme.display(18f), Theme.GOLD_HI);
-	private final JLabel where = Ui.label(" ", Theme.ui(12.5f), Theme.TEXT_2);
-	private final JPanel stats = Ui.clear(new GridLayout(0, 4, 8, 6));
+	private final CardLayout detailCards = new CardLayout();
+	private final JPanel detail = Ui.clear(detailCards);
+	private final Widgets.AvatarView avatar = new Widgets.AvatarView(56);
+	private final JLabel name = Ui.label(" ", Theme.display(20f), Theme.GOLD_HI);
+	private final JLabel rank = Ui.label(" ", Theme.uiBold(11f), Theme.TEXT_3);
+	private final JLabel where = Ui.label(" ", Theme.ui(13f), Theme.TEXT_2);
+	private final JLabel discord = Ui.label(" ", Theme.ui(12f), Theme.TEXT_3);
+	private final JPanel stats = Ui.clear(new java.awt.GridLayout(0, 3, 6, 3));
 	private final List<Ui.Button> moderatorButtons = new ArrayList<>();
 	private final List<Ui.Button> adminButtons = new ArrayList<>();
 	private String listSignature = "";
 	private String statsFor = "";
+	private String avatarFor = "";
 
 	PlayersPage(Session session, AdminWindow window)
 	{
-		super("Players", "Who is online, with one-click moderation and quick links to items and stats.", "moderator", session, window);
+		super("Players", "Who is online, with one-click moderation.", "moderator", session, window);
+	}
+
+	@Override
+	boolean targeted()
+	{
+		return true;
 	}
 
 	@Override
@@ -42,7 +55,6 @@ final class PlayersPage extends Page
 	{
 		JPanel page = shell();
 		list.setLayout(new BoxLayout(list, BoxLayout.Y_AXIS));
-		Ui.field(search);
 		search.getDocument().addDocumentListener(new DocumentListener()
 		{
 			@Override
@@ -64,60 +76,92 @@ final class PlayersPage extends Page
 			}
 		});
 
-		Ui.Section online = new Ui.Section("Online", "Click a player to select them.", new BorderLayout(0, 8));
-		JPanel top = Ui.clear(new BorderLayout(0, 4));
+		Ui.Section online = new Ui.Section("Online now", null, new BorderLayout(0, 8));
+		JPanel top = Ui.clear(new BorderLayout(0, 6));
 		top.add(search, BorderLayout.NORTH);
 		top.add(count, BorderLayout.SOUTH);
 		online.body().add(top, BorderLayout.NORTH);
 		online.body().add(Ui.scroll(list), BorderLayout.CENTER);
-		online.setPreferredSize(new Dimension(320, 100));
 
-		Ui.Section selected = new Ui.Section("Selected player", "Actions are logged under your name.", new BorderLayout(0, 10));
-		JPanel head = Ui.clear(new BorderLayout(0, 2));
-		head.add(name, BorderLayout.NORTH);
-		head.add(where, BorderLayout.CENTER);
-		JPanel buttons = Ui.clear(new GridLayout(0, 2, 8, 8));
-		buttons.add(moderator(new Ui.Button("Teleport to", Ui.Kind.STONE, Ui.Glyph.TARGET), "teleport-to", null));
-		buttons.add(moderator(new Ui.Button("Summon here", Ui.Kind.STONE, Ui.Glyph.LOAD), "summon", null));
-		buttons.add(moderator(new Ui.Button("Heal", Ui.Kind.STONE, Ui.Glyph.CHECK), "heal", null));
-		buttons.add(moderator(new Ui.Button("Kick", Ui.Kind.DANGER, Ui.Glyph.STOP), "kick", "Kick %s from the game?"));
-		Ui.Button give = new Ui.Button("Give item", Ui.Kind.STONE, Ui.Glyph.SAVE);
-		give.addActionListener(event -> window.show(AdminWindow.ITEMS));
-		adminButtons.add(give);
-		buttons.add(give);
-		Ui.Button setStats = new Ui.Button("Set stats", Ui.Kind.STONE, Ui.Glyph.GEAR);
-		setStats.addActionListener(event -> window.show(AdminWindow.STATS));
-		adminButtons.add(setStats);
-		buttons.add(setStats);
-		Ui.Button wipe = new Ui.Button("Wipe inventory", Ui.Kind.DANGER, Ui.Glyph.TRASH);
-		wipe.addActionListener(event -> run("wipe-inventory", "Wipe %s's inventory? This can't be undone."));
-		adminButtons.add(wipe);
-		buttons.add(wipe);
-		JPanel body = Ui.clear(new BorderLayout(0, 14));
-		body.add(head, BorderLayout.NORTH);
-		body.add(buttons, BorderLayout.CENTER);
-		JPanel statsBox = Ui.clear(new BorderLayout(0, 6));
-		statsBox.add(Ui.label("LEVELS", Theme.eyebrow(10f), Theme.TEXT_4), BorderLayout.NORTH);
-		statsBox.add(stats, BorderLayout.CENTER);
-		body.add(statsBox, BorderLayout.SOUTH);
-		selected.body().add(body, BorderLayout.NORTH);
+		Ui.Section selected = new Ui.Section("Selected player", null, new BorderLayout());
+		detail.add(Widgets.empty("Pick a player", "Choose someone from the list to see their levels and moderation tools."), "empty");
+		detail.add(Ui.scroll(Widgets.top(detailBody())), "detail");
+		selected.body().add(detail, BorderLayout.CENTER);
 
-		JPanel columns = Ui.clear(new BorderLayout(14, 0));
-		columns.add(online, BorderLayout.WEST);
-		columns.add(selected, BorderLayout.CENTER);
-		page.add(columns, BorderLayout.CENTER);
+		page.add(new Widgets.Split(online, selected, 0.38, 300, 420, 600), BorderLayout.CENTER);
 		rebuildList();
 		return page;
 	}
 
-	private Ui.Button moderator(Ui.Button button, String action, String confirmText)
+	private JComponent detailBody()
+	{
+		JPanel head = Ui.clear(new BorderLayout(14, 0));
+		head.add(avatar, BorderLayout.WEST);
+		JPanel words = Ui.clear(null);
+		words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS));
+		JPanel nameRow = Ui.clear(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 10, 0));
+		nameRow.add(name);
+		nameRow.add(rank);
+		for (JComponent c : new JComponent[]{nameRow, where, discord})
+		{
+			c.setAlignmentX(0f);
+			words.add(c);
+		}
+		JPanel center = Ui.clear(new java.awt.GridBagLayout());
+		center.add(words);
+		JPanel wordsHolder = Ui.clear(new BorderLayout());
+		wordsHolder.add(words, BorderLayout.CENTER);
+		head.add(wordsHolder, BorderLayout.CENTER);
+
+		Ui.Button give = new Ui.Button("Give item", Ui.Kind.STONE, Ui.Glyph.SAVE);
+		give.addActionListener(event -> window.show(AdminWindow.ITEMS));
+		adminButtons.add(give);
+		Ui.Button setStats = new Ui.Button("Set stats", Ui.Kind.STONE, Ui.Glyph.GEAR);
+		setStats.addActionListener(event -> window.show(AdminWindow.STATS));
+		adminButtons.add(setStats);
+		Ui.Button wipe = new Ui.Button("Wipe inventory", Ui.Kind.DANGER, Ui.Glyph.TRASH);
+		wipe.addActionListener(event -> run("wipe-inventory", "Wipe inventory", "Wipe %s's inventory? This can't be undone.", "Wipe"));
+		adminButtons.add(wipe);
+
+		JPanel levels = Ui.clear(new BorderLayout(0, 8));
+		levels.add(Ui.label("LEVELS", Theme.eyebrow(10f), Theme.TEXT_4), BorderLayout.NORTH);
+		levels.add(stats, BorderLayout.CENTER);
+
+		return Widgets.column(10,
+			head,
+			group("Actions",
+				moderator(new Ui.Button("Teleport to", Ui.Kind.STONE, Ui.Glyph.TARGET), "teleport-to", null, null, null),
+				moderator(new Ui.Button("Summon here", Ui.Kind.STONE, Ui.Glyph.LOAD), "summon", null, null, null),
+				moderator(new Ui.Button("Heal", Ui.Kind.STONE, Ui.Glyph.CHECK), "heal", null, null, null),
+				give,
+				setStats),
+			levels,
+			group("Danger zone",
+				moderator(new Ui.Button("Kick", Ui.Kind.DANGER, Ui.Glyph.STOP), "kick", "Kick player", "Kick %s from the game?", "Kick"),
+				wipe));
+	}
+
+	private static JComponent group(String title, JComponent... buttons)
+	{
+		JPanel grid = Ui.clear(new Widgets.WrapGrid(138, 34, 8));
+		for (JComponent button : buttons)
+		{
+			grid.add(button);
+		}
+		JPanel box = Ui.clear(new BorderLayout(0, 8));
+		box.add(Ui.label(title.toUpperCase(), Theme.eyebrow(10f), Theme.TEXT_4), BorderLayout.NORTH);
+		box.add(grid, BorderLayout.CENTER);
+		return box;
+	}
+
+	private Ui.Button moderator(Ui.Button button, String action, String heading, String confirmText, String confirmLabel)
 	{
 		moderatorButtons.add(button);
-		button.addActionListener(event -> run(action, confirmText));
+		button.addActionListener(event -> run(action, heading, confirmText, confirmLabel));
 		return button;
 	}
 
-	private void run(String action, String confirmText)
+	private void run(String action, String heading, String confirmText, String confirmLabel)
 	{
 		String target = session.selected();
 		if (target.isEmpty())
@@ -125,7 +169,7 @@ final class PlayersPage extends Page
 			window.flash("Select a player first.", Theme.ORANGE);
 			return;
 		}
-		if (confirmText != null && !confirm(String.format(confirmText, target)))
+		if (confirmText != null && !confirm(heading, String.format(confirmText, target), confirmLabel, true))
 		{
 			return;
 		}
@@ -173,10 +217,10 @@ final class PlayersPage extends Page
 			if (query.isEmpty() || p.name.toLowerCase().contains(query))
 			{
 				shown.add(p);
-				signature.append(p.name).append(p.combat).append(p.area).append(p.modlevel).append(';');
+				signature.append(p.name).append(p.combat).append(p.area).append(p.modlevel).append(p.avatar).append(';');
 			}
 		}
-		count.setText(session.players().size() + " online");
+		count.setText(query.isEmpty() ? session.players().size() + " online" : shown.size() + " of " + session.players().size() + " online");
 		if (signature.toString().equals(listSignature))
 		{
 			return;
@@ -185,16 +229,19 @@ final class PlayersPage extends Page
 		list.removeAll();
 		if (shown.isEmpty())
 		{
-			list.add(hint(session.players().isEmpty() ? "Nobody is online right now." : "No one matches that search.", Theme.TEXT_3));
+			list.add(Widgets.empty(session.players().isEmpty() ? "Nobody is online" : "No match",
+				session.players().isEmpty() ? "Players appear here as they log in." : "Nobody online has that name."));
 		}
 		for (Session.Player p : shown)
 		{
-			String badge = Session.rank(p.modlevel) > 0 ? p.modlevel : null;
-			Ui.Tile tile = new Ui.Tile(false, () -> Ui.avatar(p.name), Ui.Glyph.NONE, p.name, "Combat " + p.combat + "   " + p.place());
-			tile.setBadge(badge);
+			Ui.Tile tile = new Ui.Tile(false, session.avatars().supplier(p.avatar, p.name, list), Ui.Glyph.NONE, p.name,
+				"Combat " + p.combat + "  ·  " + p.place());
+			tile.round(Boolean.TRUE);
+			tile.setBadge(Session.rank(p.modlevel) > 0 ? p.modlevel : null);
 			tile.setSelected(p.name.equalsIgnoreCase(session.selected()));
 			tile.onPick(() -> session.select(p.name));
-			tile.setMaximumSize(new Dimension(Integer.MAX_VALUE, 62));
+			tile.setPreferredSize(new Dimension(220, 58));
+			tile.setMaximumSize(new Dimension(Integer.MAX_VALUE, 58));
 			tile.setAlignmentX(0f);
 			list.add(tile);
 			list.add(Box.createVerticalStrut(6));
@@ -216,18 +263,23 @@ final class PlayersPage extends Page
 		}
 		if (found == null)
 		{
-			name.setText(selected.isEmpty() ? "Pick a player" : selected);
-			where.setText(selected.isEmpty() ? "Select someone from the list." : "Not online right now.");
-			if (!statsFor.isEmpty())
-			{
-				statsFor = "";
-				stats.removeAll();
-				stats.repaint();
-			}
+			detailCards.show(detail, "empty");
+			statsFor = "";
+			avatarFor = "";
 			return;
 		}
+		detailCards.show(detail, "detail");
 		name.setText(found.name);
-		where.setText(found.place() + "   " + found.modlevel);
+		rank.setText(" ");
+		rank.setIcon(new RankIcon(found.modlevel));
+		where.setText(found.place() + "  ·  Combat " + found.combat);
+		discord.setText(found.discord.isEmpty() ? "No Discord account linked" : "Discord: " + found.discord);
+		String avatarKey = found.name + "|" + found.avatar;
+		if (!avatarKey.equals(avatarFor))
+		{
+			avatarFor = avatarKey;
+			avatar.set(session.avatars().supplier(found.avatar, found.name, avatar), Boolean.TRUE);
+		}
 		if (!statsFor.equalsIgnoreCase(found.name))
 		{
 			statsFor = found.name;
@@ -242,35 +294,97 @@ final class PlayersPage extends Page
 		}
 	}
 
+	/** Paints the rank as a chip in place of an icon, so the name row stays one line. */
+	private static final class RankIcon implements javax.swing.Icon
+	{
+		private final String level;
+
+		RankIcon(String level)
+		{
+			this.level = level;
+		}
+
+		@Override
+		public void paintIcon(java.awt.Component c, Graphics graphics, int x, int y)
+		{
+			if (Session.rank(level) == 0)
+			{
+				return;
+			}
+			Graphics2D g = (Graphics2D) graphics.create();
+			Theme.smooth(g);
+			Widgets.chip(g, level, x, y, Widgets.rankTone(level), true);
+			g.dispose();
+		}
+
+		@Override
+		public int getIconWidth()
+		{
+			if (Session.rank(level) == 0)
+			{
+				return 0;
+			}
+			return new java.awt.Canvas().getFontMetrics(Theme.eyebrow(9.5f)).stringWidth(level.toUpperCase()) + 14;
+		}
+
+		@Override
+		public int getIconHeight()
+		{
+			return 16;
+		}
+	}
+
 	private void showStats(JsonObject json)
 	{
 		stats.removeAll();
 		JsonObject levels = json.has("stats") && json.get("stats").isJsonObject() ? json.getAsJsonObject("stats") : new JsonObject();
-		for (Skill skill : Skill.values())
+		int total = 0;
+		for (Skill skill : Widgets.GAME_ORDER)
 		{
-			if (skill == Skill.OVERALL)
-			{
-				continue;
-			}
 			String level = levels.has(skill.getName()) ? levels.get(skill.getName()).getAsString() : "-";
-			JLabel cell = new JLabel(level)
-			{
-				@Override
-				protected void paintComponent(java.awt.Graphics graphics)
-				{
-					java.awt.Graphics2D g = (java.awt.Graphics2D) graphics.create();
-					Theme.smooth(g);
-					Theme.icon(g, session.skillIcon(skill), 0, 2, 18, 18);
-					g.setFont(Theme.uiBold(14f));
-					Theme.shadowText(g, getText(), 26, 16, Theme.YELLOW);
-					g.dispose();
-				}
-			};
-			cell.setPreferredSize(new Dimension(60, 22));
-			cell.setToolTipText(skill.getName());
-			stats.add(cell);
+			total += levels.has(skill.getName()) ? levels.get(skill.getName()).getAsInt() : 0;
+			stats.add(new LevelCell(skill, level));
 		}
+		stats.add(new LevelCell(null, Integer.toString(total)));
 		stats.revalidate();
 		stats.repaint();
+	}
+
+	/** Skill sprite (or its short name when the client has none) beside the level in stat yellow. */
+	private final class LevelCell extends JComponent
+	{
+		private final Skill skill;
+		private final String level;
+
+		LevelCell(Skill skill, String level)
+		{
+			this.skill = skill;
+			this.level = level;
+			setToolTipText(skill == null ? "Total level" : skill.getName());
+			setPreferredSize(new Dimension(70, 24));
+		}
+
+		@Override
+		protected void paintComponent(Graphics graphics)
+		{
+			Graphics2D g = (Graphics2D) graphics.create();
+			Theme.smooth(g);
+			Theme.well(g, 0, 0, getWidth(), getHeight(), 6);
+			java.awt.Image image = session.skillIcon(skill);
+			if (image != null)
+			{
+				Theme.icon(g, image, 6, 3, 18, 18);
+			}
+			else
+			{
+				g.setFont(Theme.eyebrow(9.5f));
+				g.setColor(Theme.TEXT_3);
+				g.drawString(skill.getName().substring(0, 3).toUpperCase(), 6, 16);
+			}
+			g.setFont(Theme.uiBold(13.5f));
+			String text = level;
+			Theme.shadowText(g, text, getWidth() - 8 - g.getFontMetrics().stringWidth(text), 17, Theme.YELLOW);
+			g.dispose();
+		}
 	}
 }

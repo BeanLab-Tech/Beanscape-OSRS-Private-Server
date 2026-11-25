@@ -1,0 +1,19 @@
+{
+  "name": "beanscape-client",
+  "productName": "Beanscape Client",
+  "version": "0.1.0",
+  "description": "Electron launcher that runs Microbot 2.0.20 against the BeanLab private OSRS server",
+  "main": "electron/main.cjs",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.cjs"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "koffi": "^3.3.8"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}

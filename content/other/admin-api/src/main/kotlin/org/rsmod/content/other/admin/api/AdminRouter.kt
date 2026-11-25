@@ -28,7 +28,8 @@ public class AdminRouter(private val backend: AdminBackend, private val audit: A
     private val routes: List<Route> =
         listOf(
             route("GET", "/v1/me", Rank.Moderator) {
-                mapOf("name" to it.actor.username, "modlevel" to it.actor.rank.label)
+                mapOf("name" to it.actor.username, "modlevel" to it.actor.rank.label) +
+                    backend.identity(it.actor.accountId)
             },
             route("GET", "/v1/players", Rank.Moderator) { backend.players() },
             route("GET", "/v1/players/([^/]+)", Rank.Moderator) { backend.player(it.groups[0]) },

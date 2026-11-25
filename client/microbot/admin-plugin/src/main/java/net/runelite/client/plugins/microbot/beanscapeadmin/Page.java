@@ -10,7 +10,6 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 
 /** One screen of the console. Pages share the stone-and-gold look of the Woodcutting window. */
@@ -51,10 +50,32 @@ abstract class Page
 
 	JPanel shell()
 	{
-		JPanel page = Ui.clear(new BorderLayout(0, 14));
-		JPanel head = Ui.clear(new BorderLayout(0, 3));
-		head.add(Ui.label(title, Theme.display(19f), Theme.GOLD_HI), BorderLayout.NORTH);
-		head.add(Ui.label(description, Theme.ui(13f), Theme.TEXT_2), BorderLayout.CENTER);
+		return shell(null);
+	}
+
+	/** Page frame: title and one-line purpose on the left, an optional control on the right. */
+	/** Pages whose actions apply to a chosen player show the target chip in their header. */
+	boolean targeted()
+	{
+		return false;
+	}
+
+	JPanel shell(JComponent right)
+	{
+		if (right == null && targeted())
+		{
+			right = new Widgets.TargetChip(session);
+		}
+		JPanel page = Ui.clear(new BorderLayout(0, 16));
+		JPanel head = Ui.clear(new BorderLayout(16, 0));
+		JPanel words = Ui.clear(new BorderLayout(0, 3));
+		words.add(Ui.label(title, Theme.display(21f), Theme.GOLD_HI), BorderLayout.NORTH);
+		words.add(Ui.label(description, Theme.ui(13f), Theme.TEXT_3), BorderLayout.CENTER);
+		head.add(words, BorderLayout.CENTER);
+		if (right != null)
+		{
+			head.add(right, BorderLayout.EAST);
+		}
 		page.add(head, BorderLayout.NORTH);
 		return page;
 	}
@@ -77,8 +98,12 @@ abstract class Page
 
 	boolean confirm(String message)
 	{
-		return JOptionPane.showConfirmDialog(window.owner(), message, "Beanscape Admin",
-			JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION;
+		return confirm("Are you sure?", message, "Continue", true);
+	}
+
+	boolean confirm(String heading, String message, String confirmLabel, boolean danger)
+	{
+		return Dialogs.confirm(window.owner(), heading, message, confirmLabel, danger);
 	}
 
 	/** A recessed number box: small gold label over a big stat-yellow value. */

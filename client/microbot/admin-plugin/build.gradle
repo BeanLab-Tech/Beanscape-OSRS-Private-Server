@@ -6,14 +6,14 @@ group = 'net.runelite.client.plugins.microbot.beanscapeadmin'
 version = '0.1.0'
 
 def pluginJarName = 'BeanscapeAdminPlugin.jar'
+def clientData = file("${System.getenv('APPDATA')}/Beanscape Client")
+def microbotJar = file("${clientData}/original/microbot-2.0.20.jar")
 
-// Where the BeanLab Microbot client lives (the folder with Play-Microbot.bat). Override with
-// -PclientDir=... ; the default is the folder the README tells players to create.
-def home = System.getProperty('user.home')
-def clientDir = file(findProperty('clientDir') ?: "${home}/Desktop/OSRS-Microbot-Client")
-
-// The stock Microbot 2.0.20 jar (the one patch-microbot.py reads), used only to compile against.
-def microbotJar = file(findProperty('microbotJar') ?: "${clientDir}/original/microbot-2.0.20.jar")
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(11)
+	}
+}
 
 repositories {
 	mavenCentral()
@@ -28,27 +28,18 @@ tasks.withType(JavaCompile).configureEach {
 	options.release = 11
 }
 
-tasks.named('compileJava') {
-	doFirst {
-		if (!microbotJar.exists()) {
-			throw new GradleException("Microbot jar not found at ${microbotJar}. Download microbot-2.0.20.jar " +
-				"(README step 2) or pass -PmicrobotJar=<path> or -PclientDir=<client folder>.")
-		}
-	}
-}
-
 jar {
 	archiveFileName = pluginJarName
 	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
-// Copies the jar into the client's isolated Microbot home (Play-Microbot.bat uses .\home).
+// Copies the jar into the Beanscape client's isolated Microbot home.
 tasks.register('installToClient') {
 	group = 'beanscape'
-	description = 'Build the plugin and copy it into <client folder>\\home\\.runelite\\microbot-plugins'
+	description = 'Build and copy the plugin jar into the Beanscape client microbot-plugins folder'
 	dependsOn jar
 	doLast {
-		def dir = file("${clientDir}/home/.runelite/microbot-plugins")
+		def dir = file("${clientData}/home/.runelite/microbot-plugins")
 		dir.mkdirs()
 		copy {
 			from jar.archiveFile.get().asFile

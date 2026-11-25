@@ -78,7 +78,8 @@ def db_connect() -> sqlite3.Connection:
     return conn
 
 
-def register_account(username: str, password: str, discord_id: int, discord_username: str) -> str:
+def register_account(username: str, password: str, discord_id: int, discord_username: str,
+                     discord_avatar: str | None = None) -> str:
     """Inserts the account row. Returns 'ok', 'taken' or 'error:<msg>'."""
     username = username.lower().strip()
     if not USERNAME_RE.match(username):
@@ -91,8 +92,9 @@ def register_account(username: str, password: str, discord_id: int, discord_user
                 return "taken"
             pw_hash = PH.hash(password)
             conn.execute(
-                "INSERT INTO accounts (login_username, password_hash, discord_id, discord_username) VALUES (?, ?, ?, ?)",
-                (username, pw_hash, discord_id, discord_username),
+                "INSERT INTO accounts (login_username, password_hash, discord_id, discord_username, discord_avatar) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (username, pw_hash, discord_id, discord_username, discord_avatar),
             )
             conn.commit()
             return "ok"
@@ -299,7 +301,8 @@ async def oauth_callback(
         username = "admin"
 
     password = "".join(secrets.choice(ALLOWED_PASSWORD_CHARS) for _ in range(16))
-    result = register_account(username, password, discord_id, global_name)
+    avatar_hash = user.get("avatar") or None  # Discord CDN hash; the admin console shows it
+    result = register_account(username, password, discord_id, global_name, avatar_hash)
 
     # Discord names are user-controlled: escape everything that goes into the page.
     e_user, e_name, e_pw = html.escape(username), html.escape(global_name), html.escape(password)
@@ -313,6 +316,9 @@ with that username and password. Save the password now: it is only shown once.</
     elif result == "taken":
         conn = db_connect()
         try:
+            # Keep the stored picture current for accounts already bound to this Discord user.
+            conn.execute("UPDATE accounts SET discord_avatar = ? WHERE discord_id = ?", (avatar_hash, discord_id))
+            conn.commit()
             row = conn.execute(
                 "SELECT login_username FROM accounts WHERE discord_id = ?", (discord_id,)
             ).fetchone()

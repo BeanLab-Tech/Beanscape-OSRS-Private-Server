@@ -6,6 +6,7 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.FontMetrics;
 import java.awt.GradientPaint;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
@@ -47,7 +48,11 @@ final class AdminWindow
 	private final CardLayout modeCards = new CardLayout();
 	private final JPanel modeHost = Ui.clear(modeCards);
 	private final Ui.Pill pill = new Ui.Pill();
-	private final JLabel who = Ui.label(" ", Theme.ui(13f), Theme.TEXT_2);
+	private final JLabel online = Ui.label(" ", Theme.ui(12.5f), Theme.TEXT_3);
+	private final JLabel clock = Ui.label(" ", Theme.uiBold(12.5f), Theme.TEXT_2);
+	private JComponent meCard;
+	private JComponent rail;
+	private boolean compact;
 	private final JLabel offlineTitle = Ui.label("Not connected", Theme.display(19f), Theme.GOLD_HI);
 	private final JLabel offlineNote = Ui.label(" ", Theme.ui(13f), Theme.TEXT_2);
 	private final JLabel flashText = Ui.label(" ", Theme.uiBold(12.5f), Theme.TEXT_3);
@@ -56,7 +61,7 @@ final class AdminWindow
 	private Color flashColor = Theme.TEXT_3;
 	private int current = -1;
 
-	AdminWindow(Session session, WikiIcons icons)
+	AdminWindow(Session session, ItemIcons icons)
 	{
 		this.session = session;
 		pages = new Page[]{
@@ -72,7 +77,9 @@ final class AdminWindow
 		frame.setDefaultCloseOperation(WindowConstants.HIDE_ON_CLOSE);
 		frame.setContentPane(build());
 		frame.pack();
-		frame.setMinimumSize(new Dimension(960, frame.getHeight()));
+		frame.setMinimumSize(new Dimension(820, 560));
+		java.awt.Rectangle screen = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+		frame.setSize(Math.min(frame.getWidth(), screen.width - 40), Math.min(frame.getHeight(), screen.height - 40));
 		frame.setLocationRelativeTo(null);
 		flashTimer = new Timer(6000, event -> clearFlash());
 		flashTimer.setRepeats(false);
@@ -168,13 +175,12 @@ final class AdminWindow
 				Graphics2D g = (Graphics2D) graphics.create();
 				g.setColor(Theme.BG);
 				g.fillRect(0, 0, getWidth(), getHeight());
-				g.setPaint(new GradientPaint(0, 0, new Color(226, 180, 86, 16), getWidth() * 0.5f, getHeight() * 0.5f, new Color(0, 0, 0, 0)));
+				g.setPaint(new GradientPaint(0, 0, new Color(226, 180, 86, 20), getWidth() * 0.55f, getHeight() * 0.45f, new Color(0, 0, 0, 0)));
 				g.fillRect(0, 0, getWidth(), getHeight());
 				g.dispose();
 			}
 		};
-		root.add(header(), BorderLayout.NORTH);
-		root.add(navRail(), BorderLayout.WEST);
+		root.add(sidebar(), BorderLayout.WEST);
 
 		for (Page page : pages)
 		{
@@ -184,12 +190,20 @@ final class AdminWindow
 			holder.add(lockedCard(page), "locked");
 			pageHost.add(holder, page.title);
 		}
-		pageHost.setBorder(BorderFactory.createEmptyBorder(18, 22, 16, 14));
-		pageHost.setPreferredSize(new Dimension(760, 610));
+		modeHost.setBorder(BorderFactory.createEmptyBorder(22, 26, 14, 22));
 		modeHost.add(pageHost, "pages");
 		modeHost.add(offlineCard(), "offline");
 		root.add(modeHost, BorderLayout.CENTER);
-		root.add(footer(), BorderLayout.SOUTH);
+		root.add(statusBar(), BorderLayout.SOUTH);
+		root.setPreferredSize(new Dimension(1080, 720));
+		root.addComponentListener(new java.awt.event.ComponentAdapter()
+		{
+			@Override
+			public void componentResized(java.awt.event.ComponentEvent e)
+			{
+				applyCompact(root.getWidth() < 940);
+			}
+		});
 		bindKeys(root);
 		return root;
 	}
@@ -212,9 +226,78 @@ final class AdminWindow
 		}
 	}
 
-	private JComponent header()
+	/** Left rail: the mark, the pages, and who you are signed in as. */
+	private JComponent sidebar()
 	{
-		JPanel head = new JPanel(new BorderLayout(16, 0))
+		JPanel rail = new JPanel()
+		{
+			@Override
+			protected void paintComponent(Graphics graphics)
+			{
+				Graphics2D g = (Graphics2D) graphics.create();
+				g.setPaint(new GradientPaint(0, 0, new Color(0x1E1812), 0, getHeight(), new Color(0x15110C)));
+				g.fillRect(0, 0, getWidth(), getHeight());
+				g.setPaint(null);
+				g.setColor(Theme.EDGE_DARK);
+				g.drawLine(getWidth() - 1, 0, getWidth() - 1, getHeight());
+				g.setColor(Theme.EDGE_HI);
+				g.drawLine(getWidth() - 2, 0, getWidth() - 2, getHeight());
+				g.dispose();
+			}
+		};
+		rail.setLayout(new BoxLayout(rail, BoxLayout.Y_AXIS));
+		rail.setBorder(BorderFactory.createEmptyBorder(16, 0, 14, 8));
+		rail.setPreferredSize(new Dimension(212, 10));
+		this.rail = rail;
+
+		JComponent brand = new JComponent()
+		{
+			@Override
+			protected void paintComponent(Graphics graphics)
+			{
+				Graphics2D g = (Graphics2D) graphics.create();
+				Theme.smooth(g);
+				int bx = compact ? (getWidth() - 8 - 40) / 2 : 16;
+				Theme.gold(g, bx, 2, 40, 40, 10, false);
+				g.setFont(Theme.display(25f));
+				FontMetrics fm = g.getFontMetrics();
+				g.setColor(new Color(0x2A1D08));
+				g.drawString("B", bx + (40 - fm.stringWidth("B")) / 2, 2 + (40 + fm.getAscent() - fm.getDescent()) / 2);
+				if (compact)
+				{
+					g.dispose();
+					return;
+				}
+				g.setFont(Theme.display(17f));
+				Theme.shadowText(g, "BEANSCAPE", 66, 21, Theme.GOLD_HI);
+				g.setFont(Theme.eyebrow(10f));
+				g.setColor(Theme.TEXT_3);
+				g.drawString("ADMIN CONSOLE", 66, 37);
+				g.dispose();
+			}
+		};
+		brand.setPreferredSize(new Dimension(204, 46));
+		brand.setMaximumSize(new Dimension(Integer.MAX_VALUE, 46));
+		brand.setAlignmentX(0f);
+		rail.add(brand);
+		rail.add(Box.createVerticalStrut(22));
+
+		Ui.Glyph[] glyphs = {Ui.Glyph.SHIELD, Ui.Glyph.LOAD, Ui.Glyph.GEAR, Ui.Glyph.LOCK, Ui.Glyph.CLOCK, Ui.Glyph.HUD};
+		for (int i = 0; i < pages.length; i++)
+		{
+			final int index = i;
+			navs[i] = new Ui.Nav(null, glyphs[i], pages[i].title, null);
+			navs[i].onClick(() -> show(index));
+			navs[i].setAlignmentX(0f);
+			navs[i].setPreferredSize(new Dimension(196, 44));
+			navs[i].setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
+			navs[i].setToolTipText(pages[i].title + "  (Alt+" + (i + 1) + ")");
+			rail.add(navs[i]);
+			rail.add(Box.createVerticalStrut(2));
+		}
+		rail.add(Box.createVerticalGlue());
+
+		JComponent me = new JComponent()
 		{
 			@Override
 			protected void paintComponent(Graphics graphics)
@@ -223,122 +306,39 @@ final class AdminWindow
 				Theme.smooth(g);
 				int w = getWidth();
 				int h = getHeight();
-				g.setPaint(new GradientPaint(0, 0, Theme.STONE_2, 0, h, Theme.STONE_1));
-				g.fillRect(0, 0, w, h);
-				g.setPaint(new GradientPaint(0, 0, new Color(226, 180, 86, 40), w * 0.55f, 0, new Color(226, 180, 86, 0)));
-				g.fillRect(0, 0, w, h);
-				g.setPaint(new GradientPaint(0, 0, Theme.GOLD, w * 0.7f, 0, new Color(226, 180, 86, 0)));
-				g.fillRect(0, 0, w, 2);
-				g.setPaint(null);
-				g.setColor(Theme.EDGE_DARK);
-				g.drawLine(0, h - 1, w, h - 1);
-				g.dispose();
-			}
-		};
-		head.setBorder(BorderFactory.createEmptyBorder(14, 20, 14, 20));
-		head.add(crest(), BorderLayout.WEST);
-
-		JPanel words = Ui.clear(new BorderLayout(0, 3));
-		final String text = "Beanscape Admin";
-		JLabel title = new JLabel(text)
-		{
-			@Override
-			protected void paintComponent(Graphics graphics)
-			{
-				Graphics2D g = (Graphics2D) graphics.create();
-				Theme.smooth(g);
-				g.setFont(getFont());
-				int baseline = g.getFontMetrics().getAscent();
-				g.setColor(Color.BLACK);
-				g.drawString(getText(), 0, baseline + 2);
-				g.setColor(Theme.GOLD_HI);
-				g.drawString(getText(), 0, baseline);
-				g.dispose();
-			}
-		};
-		Font font = Theme.display(25f);
-		title.setFont(font);
-		title.setPreferredSize(new Dimension(title.getFontMetrics(font).stringWidth(text) + 12, 32));
-		JPanel titleRow = Ui.clear(new FlowLayout(FlowLayout.LEFT, 0, 0));
-		titleRow.add(title);
-		JLabel version = Ui.label("v0.1.0", Theme.eyebrow(10f), Theme.TEXT_4);
-		version.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
-		titleRow.add(version);
-		words.add(titleRow, BorderLayout.NORTH);
-		words.add(who, BorderLayout.CENTER);
-		head.add(words, BorderLayout.CENTER);
-
-		JPanel right = Ui.clear(new FlowLayout(FlowLayout.RIGHT, 8, 8));
-		right.add(pill);
-		head.add(right, BorderLayout.EAST);
-		return head;
-	}
-
-	private JComponent crest()
-	{
-		JComponent crest = new JComponent()
-		{
-			@Override
-			protected void paintComponent(Graphics graphics)
-			{
-				Graphics2D g = (Graphics2D) graphics.create();
-				Theme.smooth(g);
-				Theme.stone(g, 0, 0, 56, 56, 12, Theme.SLOT_2, new Color(0x1C1610));
-				g.setFont(Theme.display(30f));
-				int width = g.getFontMetrics().stringWidth("B");
-				Theme.shadowText(g, "B", (56 - width) / 2, 39, Theme.GOLD_HI);
-				g.dispose();
-			}
-		};
-		crest.setPreferredSize(new Dimension(56, 56));
-		return crest;
-	}
-
-	private JComponent navRail()
-	{
-		JPanel rail = new JPanel()
-		{
-			@Override
-			protected void paintComponent(Graphics graphics)
-			{
-				Graphics2D g = (Graphics2D) graphics.create();
-				g.setPaint(new GradientPaint(0, 0, new Color(0x1E1812), 0, getHeight(), new Color(0x16110D)));
-				g.fillRect(0, 0, getWidth(), getHeight());
-				g.setPaint(null);
-				g.setColor(Theme.EDGE_DARK);
-				g.drawLine(getWidth() - 1, 0, getWidth() - 1, getHeight());
+				boolean up = session.connected();
+				String name = up ? session.myName() : "Not signed in";
+				if (compact)
+				{
+					Widgets.paintAvatar(g, session.avatars().supplier(session.myAvatar(), name, this).get(), (w - 8 - 36) / 2, (h - 36) / 2, 36, up ? Boolean.TRUE : null);
+					g.dispose();
+					return;
+				}
+				g.setColor(new Color(0, 0, 0, 60));
+				g.fillRoundRect(8, 0, w - 8, h, 10, 10);
 				g.setColor(Theme.EDGE_SOFT);
-				g.drawLine(getWidth() - 2, 0, getWidth() - 2, getHeight());
+				g.drawRoundRect(8, 0, w - 9, h - 1, 10, 10);
+				Widgets.paintAvatar(g, session.avatars().supplier(session.myAvatar(), name, this).get(), 18, (h - 36) / 2, 36, up ? Boolean.TRUE : null);
+				g.setFont(Theme.uiBold(13.5f));
+				g.setColor(Theme.TEXT);
+				g.drawString(Theme.fit(g.getFontMetrics(), name, w - 80), 64, h / 2 - 3);
+				if (up)
+				{
+					Widgets.chip(g, session.myLevel(), 64, h / 2 + 4, Widgets.rankTone(session.myLevel()), true);
+				}
 				g.dispose();
 			}
 		};
-		rail.setLayout(new BoxLayout(rail, BoxLayout.Y_AXIS));
-		rail.setBorder(BorderFactory.createEmptyBorder(14, 0, 14, 8));
-		rail.setPreferredSize(new Dimension(212, 10));
-		JLabel label = Ui.label("CONSOLE", Theme.eyebrow(10f), Theme.TEXT_4);
-		label.setBorder(BorderFactory.createEmptyBorder(0, 18, 8, 0));
-		label.setAlignmentX(0f);
-		rail.add(label);
-		Ui.Glyph[] glyphs = {Ui.Glyph.SHIELD, Ui.Glyph.LOAD, Ui.Glyph.GEAR, Ui.Glyph.LOCK, Ui.Glyph.CLOCK, Ui.Glyph.HUD};
-		for (int i = 0; i < pages.length; i++)
-		{
-			final int index = i;
-			navs[i] = new Ui.Nav(null, glyphs[i], pages[i].title, null);
-			navs[i].onClick(() -> show(index));
-			navs[i].setAlignmentX(0f);
-			navs[i].setToolTipText(pages[i].title + "  (Alt+" + (i + 1) + ")");
-			rail.add(navs[i]);
-			rail.add(Box.createVerticalStrut(2));
-		}
-		rail.add(Box.createVerticalGlue());
-		JLabel hint = Ui.note("Every change you make here is written to the audit log.", 128);
-		hint.setBorder(BorderFactory.createEmptyBorder(0, 18, 0, 0));
-		hint.setAlignmentX(0f);
-		rail.add(hint);
+		me.setPreferredSize(new Dimension(204, 58));
+		me.setMaximumSize(new Dimension(Integer.MAX_VALUE, 58));
+		me.setAlignmentX(0f);
+		meCard = me;
+		rail.add(me);
 		return rail;
 	}
 
-	private JComponent footer()
+	/** Bottom bar: what just happened on the left, connection facts on the right. */
+	private JComponent statusBar()
 	{
 		JPanel foot = new JPanel(new BorderLayout(12, 0))
 		{
@@ -346,7 +346,7 @@ final class AdminWindow
 			protected void paintComponent(Graphics graphics)
 			{
 				Graphics2D g = (Graphics2D) graphics.create();
-				g.setPaint(new GradientPaint(0, 0, new Color(0x1A1510), 0, getHeight(), new Color(0x120E0A)));
+				g.setPaint(new GradientPaint(0, 0, new Color(0x1A1510), 0, getHeight(), Theme.BG_2));
 				g.fillRect(0, 0, getWidth(), getHeight());
 				g.setPaint(null);
 				g.setColor(Theme.EDGE_DARK);
@@ -356,7 +356,7 @@ final class AdminWindow
 				g.dispose();
 			}
 		};
-		foot.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
+		foot.setBorder(BorderFactory.createEmptyBorder(7, 18, 7, 18));
 		JComponent dot = new JComponent()
 		{
 			@Override
@@ -364,6 +364,11 @@ final class AdminWindow
 			{
 				Graphics2D g = (Graphics2D) graphics.create();
 				Theme.smooth(g);
+				if (flashText.getText().trim().isEmpty())
+				{
+					g.dispose();
+					return;
+				}
 				g.setColor(Theme.alpha(flashColor, 60));
 				g.fillOval(0, 1, 12, 12);
 				g.setColor(flashColor);
@@ -372,12 +377,44 @@ final class AdminWindow
 			}
 		};
 		dot.setPreferredSize(new Dimension(12, 14));
-		JPanel left = Ui.clear(new FlowLayout(FlowLayout.LEFT, 8, 4));
+		JPanel left = Ui.clear(new FlowLayout(FlowLayout.LEFT, 8, 3));
 		left.add(dot);
 		left.add(flashText);
 		foot.add(left, BorderLayout.CENTER);
-		foot.add(Ui.label("Polling every 3 seconds", Theme.ui(12f), Theme.TEXT_4), BorderLayout.EAST);
+		JPanel right = Ui.clear(new FlowLayout(FlowLayout.RIGHT, 14, 0));
+		right.add(online);
+		right.add(pill);
+		right.add(clock);
+		foot.add(right, BorderLayout.EAST);
+		new Timer(20_000, event -> tick()).start();
+		tick();
 		return foot;
+	}
+
+	/** Narrow windows get an icon-only rail so the pages keep their room. */
+	private void applyCompact(boolean value)
+	{
+		if (value == compact || rail == null)
+		{
+			return;
+		}
+		compact = value;
+		rail.setPreferredSize(new Dimension(value ? 68 : 212, 10));
+		for (Ui.Nav nav : navs)
+		{
+			nav.setCompact(value);
+		}
+		rail.revalidate();
+		rail.repaint();
+		if (meCard != null)
+		{
+			meCard.repaint();
+		}
+	}
+
+	private void tick()
+	{
+		clock.setText(java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")));
 	}
 
 	private JComponent lockedCard(Page page)
@@ -427,7 +464,11 @@ final class AdminWindow
 	{
 		boolean up = session.connected();
 		pill.set(up ? "Connected" : "Offline", up ? Theme.GREEN : Theme.RED);
-		who.setText(up ? "Signed in as " + session.myName() + "  (" + session.myLevel() + ")" : "Not signed in");
+		online.setText(up ? session.players().size() + " online" : " ");
+		if (meCard != null)
+		{
+			meCard.repaint();
+		}
 		offlineNote.setText(session.error());
 		modeCards.show(modeHost, up ? "pages" : "offline");
 		for (int i = 0; i < pages.length; i++)

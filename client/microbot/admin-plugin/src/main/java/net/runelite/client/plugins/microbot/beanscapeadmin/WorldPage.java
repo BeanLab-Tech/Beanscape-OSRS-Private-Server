@@ -57,6 +57,12 @@ final class WorldPage extends Page
 	}
 
 	@Override
+	boolean targeted()
+	{
+		return true;
+	}
+
+	@Override
 	JComponent build()
 	{
 		JPanel page = shell();
@@ -97,7 +103,7 @@ final class WorldPage extends Page
 		openRow.add(open);
 		web.body().add(openRow, BorderLayout.CENTER);
 
-		page.add(Page.stack(kpis, announce, restart, tele, web), BorderLayout.CENTER);
+		page.add(Ui.scroll(Widgets.top(Page.stack(kpis, announce, restart, tele, web))), BorderLayout.CENTER);
 		syncButtons();
 		return page;
 	}
@@ -198,7 +204,7 @@ final class WorldPage extends Page
 	{
 		int[] seconds = {60, 300, 900};
 		int chosen = seconds[Math.max(0, Math.min(2, countdown.getSelected()))];
-		if (!confirm("Reboot the world in " + (chosen / 60) + " minute(s)? Everyone online will be saved and logged out."))
+		if (!confirm("Reboot world", "Reboot the world in " + (chosen / 60) + " minute(s)? Everyone online is saved and logged out.", "Reboot", true))
 		{
 			return;
 		}

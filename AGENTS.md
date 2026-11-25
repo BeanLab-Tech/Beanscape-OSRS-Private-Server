@@ -18,6 +18,7 @@ api/db/src/main/resources/db/migration/
   V10__discord_oauth.sql             Discord OAuth columns
   V11__beanlab_members_for_all.sql   every account members
   V12__admin_api.sql                 admin_tokens + admin_audit (admin console API)
+  V13__discord_avatar.sql            accounts.discord_avatar (profile picture in the admin console)
 api/account/.../CharacterAccountApplier.kt   forces player.members = true at login
 api/config/.../BaseObjs.kt           adds objs.rotten_potato
 content/other/admin-potato/          rotten potato menu, ::teleports/::tp (TeleportCatalog/Menu),

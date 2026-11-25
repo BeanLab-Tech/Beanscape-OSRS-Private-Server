@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:">
+  <title>Beanscape</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <div class="shell" id="shell">
+      <aside class="side">
+        <div class="side-brand">
+          <span class="mark" aria-hidden="true">B</span>
+          <span class="brand">BEANSCAPE</span>
+        </div>
+        <nav class="nav" aria-label="Launcher">
+          <button class="navi on" type="button" data-view="home" aria-current="page">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 1 7h2v7h4v-4h2v4h4V7h2z" /></svg>
+            <span>Home</span>
+          </button>
+          <button class="navi" type="button" data-view="characters">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="5" r="3" /><path d="M2 15c0-3.5 2.7-5 6-5s6 1.5 6 5z" /></svg>
+            <span>Characters</span>
+          </button>
+          <button class="navi" type="button" data-view="sessions">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 13h2V8H1zm4 0h2V4H5zm4 0h2V6H9zm4 0h2V2h-2z" /></svg>
+            <span>Sessions</span><b class="cnt" id="nav-sessions" hidden></b>
+          </button>
+          <button class="navi" type="button" data-view="updates">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1a7 7 0 1 0 7 7h-2a5 5 0 1 1-1.5-3.5L9 7h6V1l-2 2A7 7 0 0 0 8 1z" /></svg>
+            <span>Updates</span><b class="cnt" id="nav-updates" hidden></b>
+          </button>
+          <button class="navi" type="button" data-view="settings">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M7 1h2l.4 2 1.6.7 1.7-1.2 1.4 1.4-1.2 1.7.7 1.6 2 .4v2l-2 .4-.7 1.6 1.2 1.7-1.4 1.4-1.7-1.2-1.6.7L9 15H7l-.4-2-1.6-.7-1.7 1.2-1.4-1.4 1.2-1.7L2.4 9 1 9V7l2-.4.7-1.6-1.2-1.7 1.4-1.4 1.7 1.2L7.4 3zM8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z" /></svg>
+            <span>Settings</span>
+          </button>
+        </nav>
+        <p class="side-label">Live clients</p>
+        <div class="side-live" id="side-live"></div>
+      </aside>
+
+      <main class="main">
+        <!-- Home -->
+        <section class="view home" id="view-home" data-view="home">
+          <div class="panel play-card">
+            <div class="who-row">
+              <div class="avatar" id="hero-avatar" aria-hidden="true">?</div>
+              <div class="who">
+                <label class="sr-only" for="hero-pick">Character</label>
+                <select id="hero-pick" class="hero-pick"></select>
+                <div class="who-meta">
+                  <div class="badges" id="hero-badges"></div>
+                  <button class="link" id="hero-add" type="button">Add account</button>
+                  <button class="link" id="hero-edit" type="button" hidden>Edit</button>
+                </div>
+              </div>
+            </div>
+            <button class="btn gold play" id="play" type="button" disabled><span id="play-word">PLAY</span></button>
+            <p class="play-sub" id="play-sub">Add an account, then Play</p>
+            <div class="progress-wrap" hidden id="progress-wrap">
+              <div class="progress-label"><span id="progress-text">Getting ready</span><span id="progress-pct"></span></div>
+              <div class="bar"><i id="progress-bar"></i></div>
+            </div>
+          </div>
+
+          <div class="panel sheet">
+            <dl class="stats">
+              <div class="stat"><dt>Total level</dt><dd id="total-value">—</dd></div>
+              <div class="stat"><dt>Combat</dt><dd id="combat-value">—</dd></div>
+              <div class="stat"><dt>Wealth</dt><dd class="gp" id="wealth-value">—</dd></div>
+              <div class="stat"><dt>Playtime</dt><dd id="playtime-value">—</dd></div>
+            </dl>
+            <div class="skills" id="skill-list"></div>
+            <p class="cached" id="cached-at"></p>
+          </div>
+
+          <div class="home-bottom">
+            <div class="panel progress-panel">
+              <div class="ph">
+                <h3>Progress</h3>
+                <div class="ph-r">
+                  <div class="seg" id="metric-seg" role="group" aria-label="Measure">
+                    <button type="button" class="on" data-metric="xp">XP</button>
+                    <button type="button" data-metric="wealth">Wealth</button>
+                    <button type="button" data-metric="levels">Levels</button>
+                  </div>
+                </div>
+              </div>
+              <div class="chart-meta">
+                <select id="skill-pick" aria-label="Skill"></select>
+                <span id="chart-delta"></span>
+                <div class="seg range" id="range-seg" role="group" aria-label="Range">
+                  <button type="button" data-range="7d">7d</button>
+                  <button type="button" class="on" data-range="30d">30d</button>
+                  <button type="button" data-range="all">All</button>
+                </div>
+              </div>
+              <div class="chart-wrap"><svg class="chart" id="progress-chart" preserveAspectRatio="none"></svg><p class="chart-empty" id="chart-empty" hidden></p></div>
+            </div>
+
+            <div class="panel feed-panel">
+              <div class="ph">
+                <h3>Account feed</h3>
+                <div class="ph-r">
+                  <div class="seg" id="feed-seg" role="group" aria-label="Whose feed">
+                    <button type="button" class="on" data-scope="one">This character</button>
+                    <button type="button" data-scope="all">All</button>
+                  </div>
+                </div>
+              </div>
+              <ul class="feed" id="feed-list"></ul>
+            </div>
+          </div>
+        </section>
+
+        <!-- Characters -->
+        <section class="view" id="view-characters" data-view="characters" hidden>
+          <div class="view-head">
+            <h2>Characters</h2>
+            <button class="btn gold sm" id="add-account" type="button">Add account</button>
+          </div>
+          <ul class="roster" id="account-list"></ul>
+        </section>
+
+        <!-- Sessions -->
+        <section class="view" id="view-sessions" data-view="sessions" hidden>
+          <div class="view-head">
+            <h2>Sessions</h2>
+            <span class="muted" id="sessions-mem"></span>
+          </div>
+          <div class="panel"><div class="health-body" id="sessions-health"></div></div>
+        </section>
+
+        <!-- Updates -->
+        <section class="view updates" id="view-updates" data-view="updates" hidden>
+          <div class="view-head">
+            <h2>Updates</h2>
+            <button class="btn sm" id="updates-check" type="button">Check now</button>
+          </div>
+          <div class="updates-grid">
+            <div class="panel"><div class="ph"><h3>Channel</h3></div><ul class="channel" id="update-list"></ul></div>
+            <div class="panel changelog" id="update-detail"></div>
+          </div>
+        </section>
+
+        <!-- Settings -->
+        <section class="view settings" id="view-settings" data-view="settings" hidden>
+          <div class="view-head"><h2>Settings</h2></div>
+          <div class="settings-grid">
+            <section class="panel setup-block">
+              <div class="setup-row"><h3>Accent color</h3><p class="value" id="theme-label">Gold</p></div>
+              <div class="theme-swatches" id="theme-swatches" role="radiogroup" aria-labelledby="theme-label"></div>
+              <div class="setup-row"><h3>Background</h3><p class="value" id="bg-label">Stone</p></div>
+              <div class="theme-swatches swatches-bg" id="bg-swatches" role="radiogroup" aria-labelledby="bg-label"></div>
+              <p class="hint">Both apply instantly and are remembered.</p>
+            </section>
+            <section class="panel setup-block">
+              <div class="setup-row"><h3>BeanLab</h3></div>
+              <ul class="checks" aria-label="Runtime">
+                <li class="check"><span class="dot" id="dot-server"></span><span class="label">Server</span><span class="value" id="val-server">Checking</span></li>
+                <li class="check"><span class="dot" id="dot-java"></span><span class="label">Java</span><span class="value" id="val-java">Checking</span></li>
+                <li class="check"><span class="dot" id="dot-client"></span><span class="label">Client</span><span class="value" id="val-client">Checking</span></li>
+              </ul>
+              <pre class="runlog" id="log" aria-live="polite"></pre>
+            </section>
+            <section class="panel setup-block">
+              <div class="setup-row"><h3>Java</h3><p class="value" id="java-value">Checking</p></div>
+              <p class="hint">Needs 17 or newer. Install uses winget for Temurin 21.</p>
+              <button class="btn sm" id="java" type="button" hidden>Install Java</button>
+            </section>
+            <section class="panel setup-block">
+              <div class="setup-row"><h3>Client</h3><p class="value" id="client-value">Checking</p></div>
+              <p class="hint">Microbot 2.0.20, patched for this server. Rebuild after a modulus change.</p>
+              <div class="row">
+                <button class="btn sm" id="rebuild" type="button">Rebuild client</button>
+                <button class="btn sm ghost" id="data" type="button">Open data folder</button>
+              </div>
+            </section>
+            <section class="panel setup-block">
+              <div class="setup-row"><h3>Memory per client</h3><p class="value" id="memory-label">2048 MB</p></div>
+              <div class="heap"><input id="memory" type="range" min="1024" max="4096" step="128" aria-labelledby="memory-label"></div>
+              <p class="hint" id="memory-hint">Applies to clients you start next.</p>
+            </section>
+            <section class="panel setup-block">
+              <div class="setup-row"><h3>New account</h3></div>
+              <p class="hint">BeanLab creates the login on Discord. Add that username and password on the Characters tab.</p>
+              <button class="btn sm" id="register" type="button">Open Discord registration</button>
+            </section>
+            <section class="panel setup-block" id="admin" hidden>
+              <div class="setup-row"><h3>Admin tools</h3><p class="value" id="admin-state">Not installed</p></div>
+              <p class="hint">Owners only. Paste the token from <code>::admintoken</code> in game, then install. Restart the client to load it.</p>
+              <div class="admin-row">
+                <label class="sr-only" for="admin-token">Admin token</label>
+                <input id="admin-token" type="password" autocomplete="off" spellcheck="false" placeholder="bsa_...">
+                <button class="btn sm gold" id="admin-install" type="button">Install</button>
+                <button class="btn sm ghost" id="admin-remove" type="button">Remove</button>
+              </div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <footer class="status">
+      <span id="status-clients">No clients running</span>
+      <span id="status-server">Server</span>
+      <span id="status-microbot">Microbot</span>
+      <span class="gold" id="status-updates"></span>
+      <span class="status-line" id="error" role="alert"></span>
+      <time id="clock" datetime=""></time>
+    </footer>
+  </div>
+
+  <div id="toast" class="toast" hidden role="status"></div>
+
+  <dialog id="account-dialog" aria-labelledby="editor-title">
+    <form id="account-form">
+      <header class="dlg-head">
+        <span id="editor-title">Account</span>
+        <span id="editor-mode">Add</span>
+      </header>
+      <div class="dlg-body">
+        <input type="hidden" id="acct-id">
+        <label>Username
+          <input id="acct-user" autocomplete="username" spellcheck="false" maxlength="12" required>
+        </label>
+        <label>Password
+          <input id="acct-pass" type="password" autocomplete="new-password">
+        </label>
+        <p class="hint">The login the BeanLab client asks for. The password stays on this PC, encrypted by Windows.</p>
+        <p class="form-error" id="acct-error" role="alert"></p>
+      </div>
+      <footer class="dlg-foot">
+        <button class="btn danger sm" id="acct-delete" type="button" hidden>Remove account</button>
+        <span class="dlg-spacer"></span>
+        <button class="btn ghost sm" id="acct-cancel" type="button">Cancel</button>
+        <button class="btn gold sm" id="acct-save" type="submit">Save account</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <script src="format.js"></script>
+  <script src="chart.js"></script>
+  <script src="views/health.js"></script>
+  <script src="views/feed.js"></script>
+  <script src="views/updates.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -324,6 +324,8 @@ final class Ui
 		private boolean selected;
 		private boolean locked;
 		private boolean hover;
+		private boolean round;
+		private Boolean presence;
 		private Runnable onPick;
 
 		Tile(boolean vertical, Supplier<Image> icon, Glyph glyph, String title, String detail)
@@ -397,6 +399,14 @@ final class Ui
 		Tile onPick(Runnable action)
 		{
 			onPick = action;
+			return this;
+		}
+
+		/** Draws the picture as a round avatar instead of an item slot; presence adds an online dot. */
+		Tile round(Boolean online)
+		{
+			round = true;
+			presence = online;
 			return this;
 		}
 
@@ -513,14 +523,21 @@ final class Ui
 			else
 			{
 				int slot = h - 18;
-				Theme.well(g, 9, 9, slot + 6, slot, 6);
-				if (image != null)
+				if (round)
 				{
-					Theme.icon(g, image, 12, 11, slot, slot - 4);
+					Widgets.paintAvatar(g, image, 10, 8, h - 16, presence);
 				}
 				else
 				{
-					Ui.glyph(g, glyph, 9 + (slot + 6 - 20) / 2, 9 + (slot - 20) / 2, 20, selected ? Theme.GOLD_HI : Theme.TEXT_2);
+					Theme.well(g, 9, 9, slot + 6, slot, 6);
+					if (image != null)
+					{
+						Theme.icon(g, image, 12, 11, slot, slot - 4);
+					}
+					else
+					{
+						Ui.glyph(g, glyph, 9 + (slot + 6 - 20) / 2, 9 + (slot - 20) / 2, 20, selected ? Theme.GOLD_HI : Theme.TEXT_2);
+					}
 				}
 				int tx = slot + 26;
 				g.setFont(Theme.uiBold(13.5f));
@@ -1169,6 +1186,8 @@ final class Ui
 		private final JTextField field = new JTextField();
 		private int value;
 		private Runnable onChange;
+		private Button minus;
+		private Button plus;
 
 		Stepper(int min, int max, int value)
 		{
@@ -1177,8 +1196,8 @@ final class Ui
 			this.max = max;
 			this.value = value;
 			setOpaque(false);
-			Button minus = new Button("-", Kind.STONE, Glyph.NONE);
-			Button plus = new Button("+", Kind.STONE, Glyph.NONE);
+			minus = new Button("-", Kind.STONE, Glyph.NONE);
+			plus = new Button("+", Kind.STONE, Glyph.NONE);
 			minus.setFont(Theme.uiBold(15f));
 			plus.setFont(Theme.uiBold(15f));
 			minus.setPreferredSize(new Dimension(32, 32));
@@ -1192,7 +1211,7 @@ final class Ui
 			field.setFont(Theme.uiBold(14f));
 			field.setForeground(Theme.YELLOW);
 			field.setColumns(5);
-			field.setText(Integer.toString(value));
+			field.setText(format(value));
 			field.addActionListener(e -> commit());
 			field.addFocusListener(new FocusAdapter()
 			{
@@ -1221,8 +1240,27 @@ final class Ui
 			}
 			catch (NumberFormatException ex)
 			{
-				field.setText(Integer.toString(value));
+				field.setText(format(value));
 			}
+		}
+
+		private static String format(int number)
+		{
+			return String.format("%,d", number);
+		}
+
+		/** Tighter buttons and field, for grids of many steppers. */
+		Stepper compact()
+		{
+			minus.setPreferredSize(new Dimension(26, 30));
+			plus.setPreferredSize(new Dimension(26, 30));
+			field.setColumns(2);
+			field.setFont(Theme.uiBold(13f));
+			field.setBorder(BorderFactory.createCompoundBorder(
+				BorderFactory.createLineBorder(Theme.EDGE_DARK),
+				BorderFactory.createEmptyBorder(3, 4, 3, 4)));
+			setPreferredSize(new Dimension(104, 30));
+			return this;
 		}
 
 		Stepper onChange(Runnable action)
@@ -1246,7 +1284,7 @@ final class Ui
 			int clamped = Math.max(min, Math.min(max, next));
 			boolean changed = clamped != value;
 			value = clamped;
-			field.setText(Integer.toString(value));
+			field.setText(format(value));
 			if (fire && changed && onChange != null)
 			{
 				onChange.run();
@@ -1274,6 +1312,7 @@ final class Ui
 		private String detail;
 		private boolean active;
 		private boolean hover;
+		private boolean compact;
 		private Runnable onClick;
 
 		Nav(Supplier<Image> icon, Glyph glyph, String title, String detail)
@@ -1336,6 +1375,16 @@ final class Ui
 			repaint();
 		}
 
+		/** Icon-only layout for narrow windows; the title moves to the tooltip. */
+		void setCompact(boolean value)
+		{
+			if (compact != value)
+			{
+				compact = value;
+				repaint();
+			}
+		}
+
 		void setDetail(String value)
 		{
 			if (value == null ? detail != null : !value.equals(detail))
@@ -1368,7 +1417,7 @@ final class Ui
 				g.fillRoundRect(8, 3, w - 14, h - 6, 8, 8);
 			}
 			int slot = 30;
-			int sx = 16;
+			int sx = compact ? (w - 8 - slot) / 2 : 16;
 			int sy = (h - slot) / 2;
 			g.setColor(active ? new Color(226, 180, 86, 30) : new Color(0, 0, 0, 50));
 			g.fillRoundRect(sx, sy, slot, slot, 6, 6);
@@ -1386,8 +1435,11 @@ final class Ui
 			int tx = sx + slot + 11;
 			g.setFont(Theme.uiBold(13.5f));
 			g.setColor(active ? Theme.GOLD_HI : (hover ? Theme.TEXT : Theme.TEXT_2));
-			g.drawString(title, tx, detail == null ? h / 2 + 5 : h / 2 - 2);
-			if (detail != null)
+			if (!compact)
+			{
+				g.drawString(title, tx, detail == null ? h / 2 + 5 : h / 2 - 2);
+			}
+			if (detail != null && !compact)
 			{
 				g.setFont(Theme.ui(11f));
 				g.setColor(Theme.TEXT_4);

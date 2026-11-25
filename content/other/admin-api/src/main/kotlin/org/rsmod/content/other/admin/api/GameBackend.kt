@@ -5,6 +5,7 @@ import com.github.michaelbull.logging.InlineLogger
 import jakarta.inject.Inject
 import java.lang.management.ManagementFactory
 import java.security.SecureRandom
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -30,6 +31,7 @@ import org.rsmod.game.stat.PlayerSkillXPTable
 import org.rsmod.game.type.mod.ModLevelType
 import org.rsmod.game.type.mod.ModLevelTypeList
 import org.rsmod.game.type.obj.ObjTypeList
+import org.rsmod.game.type.obj.UnpackedObjType
 import org.rsmod.game.type.stat.StatTypeList
 import org.rsmod.map.CoordGrid
 
@@ -55,23 +57,30 @@ constructor(
     private val logger = InlineLogger()
     private val random = SecureRandom()
     private val rebootScheduled = AtomicBoolean(false)
+    private val identities = ConcurrentHashMap<Int, Identity>()
 
     // ---------------------------------------------------------------- reads
 
-    override fun players(): Map<String, Any?> =
-        access.onGameThread {
-            val list =
+    override fun players(): Map<String, Any?> {
+        val rows =
+            access.onGameThread {
                 playerList.map { player ->
-                    mapOf(
-                        "name" to player.displayName,
-                        "combat" to player.appearance.combatLevel,
-                        "modlevel" to rankOf(player).label,
-                        "coords" to coords(player),
-                        "area" to "",
-                    )
+                    player.accountId to
+                        mapOf(
+                            "name" to player.displayName,
+                            "combat" to player.appearance.combatLevel,
+                            "modlevel" to rankOf(player).label,
+                            "coords" to coords(player),
+                            "area" to "",
+                        )
                 }
-            mapOf("players" to list)
-        }
+            }
+        val known = identitiesFor(rows.map { it.first })
+        return mapOf("players" to rows.map { (id, row) -> row + identityFields(known[id]) })
+    }
+
+    override fun identity(accountId: Int): Map<String, Any?> =
+        identityFields(identitiesFor(listOf(accountId))[accountId])
 
     @OptIn(InternalApi::class)
     override fun player(name: String): Map<String, Any?> =
@@ -130,9 +139,21 @@ constructor(
                 .filter { it.name.isNotBlank() && !it.name.equals("null", ignoreCase = true) }
                 .filter { it.certtemplate <= 0 && it.placeholdertemplate == 0 }
                 .filter { it.name.lowercase().contains(needle) }
-                .sortedBy { it.name.length }
+                .map { it to ItemKinds.classify(it) }
+                .sortedWith(
+                    compareBy<Pair<UnpackedObjType, String>>({ it.second == ItemKinds.JUNK })
+                        .thenBy { it.first.name.length }
+                )
                 .take(MAX_ITEMS)
-                .map { mapOf("id" to it.id, "name" to it.name) }
+                .map { (type, kind) ->
+                    mapOf(
+                        "id" to type.id,
+                        "name" to type.name,
+                        "kind" to kind,
+                        "tradeable" to type.tradeable,
+                        "members" to type.members,
+                    )
+                }
                 .toList()
         return mapOf("items" to items)
     }
@@ -306,7 +327,8 @@ constructor(
             access.query { connection ->
                 connection
                     .prepareStatement(
-                        "SELECT id, login_username, modlevel FROM accounts " +
+                        "SELECT id, login_username, modlevel, discord_id, discord_username, " +
+                            "discord_avatar FROM accounts " +
                             "WHERE login_username LIKE ? ORDER BY id DESC LIMIT $MAX_ACCOUNTS"
                     )
                     .use { statement ->
@@ -319,6 +341,12 @@ constructor(
                                             "id" to rs.getInt(1),
                                             "username" to rs.getString(2),
                                             "modlevel" to Rank.parse(rs.getString(3)).label,
+                                            "discord" to (rs.getString(5) ?: ""),
+                                            "avatar" to
+                                                DiscordAvatars.url(
+                                                    rs.getLong(4).takeUnless { rs.wasNull() },
+                                                    rs.getString(6),
+                                                ),
                                         )
                                     )
                                 }
@@ -501,7 +529,70 @@ constructor(
         repeat(PASSWORD_LENGTH) { append(PASSWORD_CHARS[random.nextInt(PASSWORD_CHARS.length)]) }
     }
 
+    private data class Identity(
+        val discordId: Long?,
+        val discordName: String,
+        val avatarHash: String?,
+        val loadedAt: Long,
+    )
+
+    private fun identityFields(identity: Identity?): Map<String, Any?> =
+        mapOf(
+            "avatar" to DiscordAvatars.url(identity?.discordId, identity?.avatarHash),
+            "discord" to (identity?.discordName ?: ""),
+        )
+
+    /**
+     * Discord identity for accounts, cached for a minute because the console polls the player list
+     * every few seconds. A busy database leaves the old entry in place rather than failing the
+     * poll.
+     */
+    private fun identitiesFor(ids: Collection<Int>): Map<Int, Identity> {
+        val now = System.currentTimeMillis()
+        val stale =
+            ids.distinct().filter { (identities[it]?.loadedAt ?: 0L) + IDENTITY_TTL_MS < now }
+        if (stale.isNotEmpty()) {
+            try {
+                val rows =
+                    access.query { connection ->
+                        val marks = stale.joinToString(",") { "?" }
+                        connection
+                            .prepareStatement(
+                                "SELECT id, discord_id, discord_username, discord_avatar " +
+                                    "FROM accounts WHERE id IN ($marks)"
+                            )
+                            .use { statement ->
+                                stale.forEachIndexed { index, id ->
+                                    statement.setInt(index + 1, id)
+                                }
+                                statement.executeQuery().use { rs ->
+                                    buildList {
+                                        while (rs.next()) {
+                                            add(
+                                                rs.getInt(1) to
+                                                    Identity(
+                                                        rs.getLong(2).takeUnless { rs.wasNull() },
+                                                        rs.getString(3) ?: "",
+                                                        rs.getString(4),
+                                                        now,
+                                                    )
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                    }
+                val found = rows.toMap()
+                stale.forEach { id -> identities[id] = found[id] ?: Identity(null, "", null, now) }
+            } catch (ex: ApiError) {
+                logger.debug { "Discord identity lookup skipped: ${ex.message}" }
+            }
+        }
+        return ids.distinct().mapNotNull { id -> identities[id]?.let { id to it } }.toMap()
+    }
+
     private companion object {
+        private const val IDENTITY_TTL_MS = 60_000L
         private const val MILLIS = 1000L
         private const val MIN_SEARCH = 2
         private const val MAX_ITEMS = 40

@@ -14,6 +14,7 @@ import javax.swing.BoxLayout;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
+import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.SkillIconManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -44,8 +45,11 @@ public class BeanscapeAdminPlugin extends Plugin
 	@Inject
 	private SkillIconManager skillIcons;
 
+	@Inject
+	private ItemManager itemManager;
+
 	private Session session;
-	private WikiIcons icons;
+	private ItemIcons icons;
 	private AdminWindow window;
 	private NavigationButton button;
 
@@ -53,7 +57,7 @@ public class BeanscapeAdminPlugin extends Plugin
 	protected void startUp()
 	{
 		session = new Session(skillIcons);
-		icons = new WikiIcons();
+		icons = new ItemIcons(itemManager);
 		SwingUtilities.invokeLater(() ->
 		{
 			window = new AdminWindow(session, icons);

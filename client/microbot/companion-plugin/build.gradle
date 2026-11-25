@@ -1,0 +1,54 @@
+plugins {
+	id 'java'
+}
+
+group = 'net.runelite.client.plugins.microbot.beanscapecompanion'
+version = '1.0.0'
+
+def pluginJarName = 'BeanscapeCompanion.jar'
+def clientData = file("${System.getenv('APPDATA')}/Beanscape Client")
+def microbotJar = file("${clientData}/original/microbot-2.0.20.jar")
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(11)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	compileOnly files(microbotJar)
+	testImplementation files(microbotJar)
+	testImplementation 'junit:junit:4.13.2'
+}
+
+tasks.withType(JavaCompile).configureEach {
+	options.encoding = 'UTF-8'
+	options.release = 11
+}
+
+jar {
+	archiveFileName = pluginJarName
+	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+// Copies the jar into the Beanscape client's isolated Microbot home and the launcher bundle.
+tasks.register('installToClient') {
+	group = 'beanscape'
+	description = 'Build and copy BeanscapeCompanion.jar into the client plugin folder and the launcher bundle'
+	dependsOn jar
+	doLast {
+		def built = jar.archiveFile.get().asFile
+		[file("${clientData}/home/.runelite/microbot-plugins"), file("${projectDir}/../beanscape-client/plugins")].each { dir ->
+			dir.mkdirs()
+			copy {
+				from built
+				into dir
+			}
+			println "Installed -> ${new File(dir, pluginJarName).absolutePath}"
+		}
+	}
+}

@@ -1,0 +1,1094 @@
+dragonaxeshop 40 0
+0 dragon_battleaxe 2 500
+1 dragon_mace 2 500
+
+scimitarshop 40 0
+0 bronze_scimitar 5 100
+1 iron_scimitar 3 200
+2 steel_scimitar 2 600
+3 mithril_scimitar 1 4000
+
+legsshop 40 0
+0 bronze_platelegs 5 100
+1 iron_platelegs 3 400
+2 steel_platelegs 2 900
+3 black_platelegs 1 1200
+4 mithril_platelegs 1 2000
+5 adamant_platelegs 1 13000
+
+generalshop3 40 1
+0 pot_empty 3 100
+1 jug_empty 2 100
+2 shears 2 100
+3 bucket_empty 2 100
+4 tinderbox 2 100
+5 chisel 2 100
+6 hammer 5 100
+
+skirtshop 40 0
+0 bronze_plateskirt 5 100
+1 iron_plateskirt 3 400
+2 steel_plateskirt 2 900
+3 black_plateskirt 1 1200
+4 mithril_plateskirt 1 2000
+5 adamant_plateskirt 1 13000
+
+gemshop2 40 0
+0 uncut_sapphire 1 25000
+1 uncut_emerald 1 40000
+2 uncut_ruby 0 2000
+3 uncut_diamond 0 4000
+4 sapphire 1 15000
+5 emerald 1 35000
+6 ruby 0 2000
+7 diamond 0 4000
+
+craftingshop2 40 0
+0 chisel 2 100
+1 ring_mould 4 100
+2 necklace_mould 2 100
+3 amulet_mould 2 100
+4 needle 3 100
+5 thread 100 5
+6 holy_symbol_mould 3 100
+7 sickle_mould 6 15
+
+craftingshop2_free 40 0
+0 chisel 2 100
+1 ring_mould 4 100
+2 necklace_mould 2 100
+3 amulet_mould 2 100
+4 needle 3 100
+5 thread 100 5
+6 holy_symbol_mould 3 100
+
+topshop 40 0
+0 bronze_platebody 3 100
+1 iron_platebody 1 200
+2 steel_platebody 1 400
+3 black_platebody 1 3000
+4 mithril_platebody 1 3000
+
+bakery 40 0
+0 bread 10 100
+1 cake 3 800
+2 chocolate_slice 8 200
+
+silvershop 40 0
+0 nostringstar 2 100
+1 silver_ore 1 2000
+2 silver_bar 1 1000
+
+adventurershop 40 1
+0 vial_empty 500 30
+2 bronze_pickaxe 2 100
+3 iron_axe 2 100
+4 cooked_meat 2 100
+5 tinderbox 2 100
+6 ball_of_wool 30 100
+7 bronze_arrow 500 10
+8 rope 20 100
+9 papyrus 50 1000
+
+spiceshop 1 0
+0 spicespot 1 100
+
+furshop 40 0
+0 fur 3 100
+1 grey_wolf_fur 3 100
+
+silverstall 40 0
+0 nostringstar 2 100
+1 silver_ore 1 2000
+2 silver_bar 1 1000
+
+ardougnegemstall 40 0
+0 sapphire 2 15000
+1 emerald 1 35000
+2 ruby 1 60000
+3 diamond 0 4000
+
+spicestall 40 0
+0 spicespot 1 100
+
+furstall 2 0
+0 fur 3 100
+1 grey_wolf_fur 3 100
+
+generallegends 40 1
+0 swordfish 20 200
+1 apple_pie 5 200
+2 3dose1attack 3 100
+3 steel_arrow 500 100
+
+legendsguildshop 40 0
+0 mithril_seed 6 50
+1 dusty_key 5 100
+2 silverlight 4 100
+3 melzarkey 3 300
+4 dragonshield_b 1 500
+5 cape_of_legends 3 500
+
+khazardshop 40 1
+0 bronze_pickaxe 5 100
+1 pot_empty 3 100
+2 jug_empty 2 100
+3 shears 2 100
+4 bucket_empty 2 100
+5 tinderbox 2 100
+6 chisel 2 100
+7 hammer 5 100
+8 rope 30 20
+9 pot_flour 30 100
+10 bucket_bailing 30 100
+11 swamppaste 500 10
+
+upassgeneralshop 40 1
+0 pot_empty 3 100
+1 rope 3 100
+2 bronze_pickaxe 2 100
+3 bucket_empty 2 100
+4 tinderbox 2 100
+5 hammer 3 100
+6 leather_boots 2 100
+7 longbow 2 100
+8 bronze_arrow 20 100
+9 salmon 10 100
+10 meat_pie 10 100
+11 bread 5 100
+12 cooked_meat 10 100
+
+helmetshop 40 0
+0 bronze_med_helm 5 100
+1 iron_med_helm 3 200
+2 steel_med_helm 3 400
+3 mithril_med_helm 1 3000
+4 adamant_med_helm 1 12000
+5 bronze_full_helm 4 100
+6 iron_full_helm 3 200
+7 steel_full_helm 2 400
+8 mithril_full_helm 1 3000
+9 adamant_full_helm 1 12000
+
+fishrestaurant 40 0
+0 herring 5 900
+1 cod 5 1100
+2 tuna 5 2300
+3 lobster 3 2600
+4 swordfish 2 2900
+
+amuletshop 40 0
+0 blessedstar 0 200
+1 amulet_of_magic 0 200
+2 amulet_of_defence 0 200
+3 amulet_of_strength 0 200
+4 amulet_of_power 0 200
+
+death_generalshop 40 1
+-1 pot_empty 3 100
+0 jug_empty 2 100
+1 shears 2 100
+2 bucket_empty 2 100
+3 tinderbox 2 100
+4 chisel 2 100
+5 hammer 5 100
+
+death_pub 40 0
+-1 asgarnian_ale 12 10
+0 wizards_mind_bomb 12 10
+1 dwarven_stout 12 10
+
+werewolfstore1 40 0
+0 raw_beef 10 100
+1 raw_chicken 10 100
+2 raw_rat_meat 10 100
+3 raw_bear_meat 10 100
+4 raw_trout 5 500
+5 raw_pike 5 500
+6 raw_salmon 5 500
+7 raw_shark 1 1000
+
+werewolfstore2 40 0
+0 wolfenboots_grey 5 100
+1 wolfenrobetop_grey 5 100
+2 wolfenrobebottom_grey 5 100
+3 wolfenhat_grey 5 100
+4 wolfengloves_grey 5 100
+5 wolfenboots_crimson 5 100
+6 wolfenrobetop_crimson 5 100
+7 wolfenrobebottom_crimson 5 100
+8 wolfenhat_crimson 5 100
+9 wolfengloves_crimson 5 100
+10 wolfenboots_tangerine 5 100
+11 wolfenrobetop_tangerine 5 100
+12 wolfenrobebottom_tangerine 5 100
+13 wolfenhat_tangerine 5 100
+14 wolfengloves_tangerine 5 100
+15 wolfenboots_ocean 5 100
+16 wolfenrobetop_ocean 5 100
+17 wolfenrobebottom_ocean 5 100
+18 wolfenhat_ocean 5 100
+19 wolfengloves_ocean 5 100
+20 wolfenboots_purple 5 100
+21 wolfenrobetop_purple 5 100
+22 wolfenrobebottom_purple 5 100
+23 wolfenhat_purple 5 100
+24 wolfengloves_purple 5 100
+25 red_cape 5 100
+26 black_cape 5 100
+27 blue_cape 5 100
+28 yellow_cape 5 100
+29 green_cape 5 100
+
+werewolfgeneralstore 40 1
+0 needle 2 100
+1 thread 50 100
+2 pot_empty 3 100
+3 bucket_empty 2 100
+4 jug_empty 2 100
+5 tinderbox 2 100
+6 chisel 2 100
+7 hammer 5 100
+
+fishingshop2 40 0
+0 net 5 100
+1 fishing_rod 5 100
+2 harpoon 2 400
+3 lobster_pot 2 400
+4 fishing_bait 1200 1
+5 big_net 5 100
+6 raw_shrimp 0 300
+7 raw_sardine 0 600
+8 raw_herring 0 900
+9 raw_mackerel 0 1000
+10 raw_cod 0 1100
+11 raw_anchovies 0 1200
+12 raw_tuna 0 2300
+13 raw_lobster 0 2600
+14 raw_bass 0 2700
+15 raw_swordfish 0 2900
+16 raw_shark 0 3500
+
+archeryshop2 40 0
+0 bolt 200 10
+1 bronze_arrow 1000 10
+2 iron_arrow 800 20
+3 steel_arrow 0 1000
+4 mithril_arrow 0 2000
+5 adamant_arrow 0 3000
+6 rune_arrow 0 4000
+7 bronze_arrowheads 1000 10
+8 iron_arrowheads 800 20
+9 steel_arrowheads 600 40
+10 mithril_arrowheads 400 40
+11 adamant_arrowheads 200 40
+12 rune_arrowheads 100 40
+13 shortbow 4 100
+14 longbow 2 200
+15 crossbow 2 400
+16 oak_shortbow 4 800
+17 oak_longbow 4 1600
+18 studded_body 2 1000
+19 studded_chaps 2 1000
+
+candleshop 40 0
+0 unlit_candle 10 100
+
+arheinstore 40 1
+0 bucket_empty 10 100
+1 bronze_pickaxe 2 100
+2 bowl_empty 2 100
+3 cake_tin 2 100
+4 tinderbox 2 100
+5 chisel 2 100
+6 hammer 5 100
+7 rope 2 300
+8 pot_empty 2 100
+
+lathastrainingstore 40 0
+0 bronze_arrow 200 10
+1 bolt 200 10
+2 shortbow 4 100
+3 longbow 2 200
+4 crossbow 2 400
+5 bronze_arrowheads 800 10
+6 iron_arrowheads 800 20
+7 steel_arrowheads 800 40
+8 mithril_arrowheads 800 80
+9 iron_axe 5 200
+10 steel_axe 3 400
+11 iron_battleaxe 5 100
+12 steel_battleaxe 2 200
+13 mithril_battleaxe 1 3000
+14 bronze_2h_sword 4 200
+15 iron_2h_sword 3 300
+16 steel_2h_sword 2 500
+17 black_2h_sword 1 700
+18 mithril_2h_sword 1 1000
+19 adamant_2h_sword 1 15000
+
+bedabincampshop 40 0
+0 water_skin4 5 100
+1 water_skin0 5 100
+2 jug_water 5 100
+3 bowl_water 5 100
+4 bucket_water 5 100
+5 knife 5 100
+
+shantayshop 40 0
+0 water_skin4 100 10
+1 water_skin0 100 10
+2 jug_water 10 100
+3 bowl_water 10 100
+4 bucket_water 10 100
+5 knife 10 100
+6 desert_shirt 10 500
+7 desert_robe 10 500
+8 desert_boots 10 500
+9 bronze_bar 10 500
+10 feather 500 50
+11 hammer 10 500
+12 bucket_empty 0 100
+13 bowl_empty 0 100
+14 jug_empty 0 100
+15 shantay_pass 500 1
+
+aprilfoolshorseshop 40 0
+0 horsey_brown 5 20
+1 horsey_white 5 20
+2 horsey_black 5 20
+3 horsey_grey 5 20
+
+generalshop5 40 1
+0 pot_empty 3 100
+1 jug_empty 2 100
+2 shears 2 100
+3 bucket_empty 2 100
+4 tinderbox 2 100
+5 chisel 2 100
+6 hammer 5 100
+
+runeplateshop 40 0
+0 rune_platebody 2 500
+1 dragonhide_body 2 500
+
+herbloreshop2 40 0
+0 vial_empty 50 100
+1 pestle_and_mortar 3 100
+2 eye_of_newt 50 20
+
+miningstore 40 0
+0 hammer 4 100
+1 bronze_pickaxe 4 100
+2 copper_ore 0 15000
+3 tin_ore 0 15000
+4 iron_ore 0 5000
+5 coal 0 5000
+6 bronze_bar 0 4000
+7 iron_bar 0 4000
+8 gold_bar 0 3000
+
+generaldwarf 40 1
+0 pot_empty 3 100
+1 jug_empty 2 100
+2 shears 2 100
+3 bucket_empty 2 100
+4 tinderbox 2 100
+5 chisel 2 100
+6 hammer 5 100
+
+pickaxeshop 40 0
+0 bronze_pickaxe 6 50
+1 iron_pickaxe 5 100
+2 steel_pickaxe 4 200
+3 mithril_pickaxe 3 300
+4 adamant_pickaxe 2 500
+5 rune_pickaxe 1 700
+
+mcannonshop 40 0
+0 twpart1 5 100
+1 twpart2 5 100
+2 twpart3 5 100
+3 twpart4 5 100
+4 mcannonbook 5 100
+5 ammo_mould 5 100
+
+gemshop 40 0
+0 uncut_sapphire 1 25000
+1 uncut_emerald 0 2000
+2 uncut_ruby 0 2000
+3 uncut_diamond 0 4000
+4 sapphire 1 15000
+5 emerald 0 1000
+6 ruby 0 2000
+7 diamond 0 4000
+
+shieldshop 40 0
+0 wooden_shield 5 100
+1 bronze_sq_shield 3 100
+2 bronze_kiteshield 3 300
+3 iron_sq_shield 2 400
+4 iron_kiteshield 0 1500
+5 steel_sq_shield 0 1500
+6 steel_kiteshield 0 1500
+7 mithril_sq_shield 0 1500
+
+chainmailshop 40 0
+0 bronze_chainbody 3 200
+1 iron_chainbody 2 300
+2 steel_chainbody 1 2000
+3 black_chainbody 1 2500
+4 mithril_chainbody 1 3500
+5 adamant_chainbody 1 9000
+
+maceshop 40 0
+0 bronze_mace 5 100
+1 iron_mace 4 200
+2 steel_mace 4 400
+3 mithril_mace 3 3000
+4 adamant_mace 2 12000
+
+generalshop4 40 1
+0 pot_empty 3 100
+1 jug_empty 2 100
+2 shears 2 100
+3 bucket_empty 2 100
+4 tinderbox 2 100
+5 chisel 2 100
+6 hammer 5 100
+
+gnomeshop 40 1
+0 pot_empty 3 100
+1 bronze_pickaxe 5 100
+2 jug_empty 2 100
+3 shears 2 100
+4 bucket_empty 2 100
+5 tinderbox 2 100
+6 chisel 2 100
+7 hammer 5 100
+8 bronze_arrow 30 100
+9 cooked_meat 2 100
+
+gnomeshop_rometti 40 0
+0 gnome_robebottoms_pink 5 200
+1 gnome_robebottoms_green 5 200
+2 gnome_robebottoms_blue 5 200
+3 gnome_robebottoms_cream 5 200
+4 gnome_robebottoms_turquoise 5 200
+5 gnome_hat_pink 5 200
+6 gnome_hat_green 5 200
+7 gnome_hat_blue 5 200
+8 gnome_hat_cream 5 200
+9 gnome_hat_turquoise 5 200
+10 gnome_robetop_pink 5 200
+11 gnome_robetop_green 5 200
+12 gnome_robetop_blue 5 200
+13 gnome_robetop_cream 5 200
+14 gnome_robetop_turquoise 5 200
+15 gnome_boots_pink 5 200
+16 gnome_boots_green 5 200
+17 gnome_boots_blue 5 200
+18 gnome_boots_cream 5 200
+19 gnome_boots_turquoise 5 200
+
+gnomeshop_gulluck 40 0
+0 bronze_arrow 200 10
+1 bolt 150 10
+2 pearl_bolt 1 1500
+3 shortbow 4 100
+4 longbow 2 200
+5 crossbow 2 400
+6 bronze_arrowheads 200 10
+7 iron_arrowheads 180 20
+8 steel_arrowheads 160 40
+9 mithril_arrowheads 140 80
+10 iron_axe 5 200
+11 steel_axe 3 400
+12 iron_battleaxe 5 100
+13 steel_battleaxe 2 200
+14 mithril_battleaxe 1 3000
+15 bronze_2h_sword 4 200
+16 iron_2h_sword 3 300
+17 steel_2h_sword 2 500
+18 black_2h_sword 1 700
+19 mithril_2h_sword 1 1000
+20 adamant_2h_sword 1 15000
+
+gnomeshop_heck 40 0
+0 brandy 5 100
+1 gin 5 100
+2 vodka 5 100
+3 whisky 5 100
+4 pineapple 5 200
+5 equa_leaves 3 100
+6 orange 5 100
+7 lemon 5 100
+8 lime 5 100
+9 dwellberries 3 100
+10 cocktail_shaker 5 200
+11 chocolate_bar 5 100
+12 chocolate_dust 5 100
+13 pot_of_cream 5 100
+14 bucket_milk 5 100
+15 knife 5 200
+16 cocktail_guide 5 100
+
+gnomeshop_hudo 40 0
+0 gianne_dough 8 100
+1 equa_leaves 5 100
+2 pot_flour 5 200
+3 gnome_spice 5 100
+4 onion 5 100
+5 potato 3 100
+6 cabbage 3 100
+7 tomato 5 100
+8 cheese 5 100
+9 lime 5 100
+10 orange 5 100
+11 lemon 5 100
+12 pineapple 5 100
+13 dwellberries 3 100
+14 cocktail_shaker 5 200
+15 chocolate_bar 8 100
+16 chocolate_dust 5 100
+17 pot_of_cream 5 100
+18 bucket_milk 5 100
+19 knife 5 200
+20 giannes_cook_book 5 100
+
+blurberrybar 40 0
+0 premade_blurberry_special 10 100
+1 premade_choc_saturday 10 100
+2 premade_drunk_dragon 10 100
+3 premade_fruit_blast 10 100
+4 premade_pineapple_punch 10 100
+5 premade_sgg 10 100
+6 premade_wizard_blizzard 10 100
+
+giannerestaurant 40 0
+0 premade_vegetable_batta 3 100
+1 premade_worm_batta 3 100
+2 premade_toad_batta 3 100
+3 premade_fruit_batta 3 100
+4 premade_cheese+tom_batta 3 100
+5 premade_worm_hole 3 100
+6 premade_tangled_toads_legs 3 100
+7 premade_veg_ball 3 100
+8 premade_chocolate_bomb 3 100
+9 premade_worm_crunchies 3 100
+10 premade_toad_crunchies 3 100
+11 premade_chocchip_crunchies 3 100
+12 premade_spicy_crunchies 3 100
+
+boozeshop 40 0
+0 beer 3 100
+1 karamja_rum 3 100
+2 jug_wine 1 15000
+
+generalshop7 40 1
+0 pot_empty 3 100
+1 jug_empty 2 100
+2 shears 2 100
+3 bucket_empty 2 100
+4 tinderbox 2 100
+5 chisel 2 100
+6 hammer 5 100
+
+junglestore 40 1
+0 tinderbox 2 500
+1 unlit_candle 10 500
+2 torch_unlit 10 500
+3 pot_empty 3 500
+4 rope 10 200
+5 leather_armour 12 500
+6 leather_gloves 10 500
+7 leather_boots 10 500
+8 cooked_meat 2 500
+9 bread 10 500
+10 vial_empty 10 500
+11 vial_water 50 200
+12 pestle_and_mortar 3 500
+13 3doseantipoison 10 150
+14 papyrus 50 200
+15 charcoal 50 200
+16 knife 2 100
+17 hammer 10 500
+18 machette 50 200
+19 chisel 10 500
+20 spade 10 500
+21 bronze_axe 2 500
+22 bronze_pickaxe 2 500
+23 iron_axe 5 700
+24 bronze_bar 10 500
+
+dragonswordshop 40 0
+0 dragon_longsword 2 500
+1 dragon_dagger 2 500
+
+cheapringshop 40 0
+0 ruby_ring 5 500
+
+generalshop8 40 1
+0 pot_empty 3 100
+1 jug_empty 2 100
+2 shears 2 100
+3 bucket_empty 2 100
+4 tinderbox 2 100
+5 chisel 2 100
+6 hammer 5 100
+
+axeshop 40 0
+0 bronze_pickaxe 5 100
+1 bronze_axe 10 100
+2 iron_axe 5 200
+3 steel_axe 3 400
+4 iron_battleaxe 5 100
+5 steel_battleaxe 2 200
+6 mithril_battleaxe 1 3000
+
+generalshop1 40 1
+0 pot_empty 3 100
+1 jug_empty 2 100
+2 shears 2 100
+3 bucket_empty 2 100
+4 tinderbox 2 100
+5 chisel 2 100
+6 hammer 5 100
+7 newcomer_map 5 100
+
+magearena_runeshop 40 0
+0 firerune 200 50
+1 waterrune 200 50
+2 airrune 200 50
+3 earthrune 200 50
+4 mindrune 140 50
+5 bodyrune 140 50
+6 naturerune 250 300
+7 chaosrune 250 100
+8 lawrune 250 300
+9 cosmicrune 20 100
+10 deathrune 250 150
+
+magearena_staffshop 40 0
+0 saradomin_staff 5 100
+1 guthix_staff 5 100
+2 zamorak_staff 5 100
+
+foodshop 10 0
+0 pot_flour 3 100
+1 raw_beef 1 100
+2 cabbage 3 100
+3 banana 3 100
+4 redberries 1 100
+5 bread 0 100
+6 chocolate_bar 1 95
+7 cheese 3 100
+8 tomato 3 100
+9 potato 1 100
+
+battleaxeshop 40 0
+0 bronze_battleaxe 4 200
+1 iron_battleaxe 3 300
+2 steel_battleaxe 2 500
+3 black_battleaxe 1 700
+4 mithril_battleaxe 1 1000
+5 adamant_battleaxe 1 15000
+
+magicshop 40 0
+0 firerune 1000 10
+1 waterrune 1000 10
+2 airrune 1000 10
+3 earthrune 1000 10
+4 mindrune 1000 10
+5 bodyrune 1000 10
+6 chaosrune 1000 100
+7 deathrune 1000 150
+8 eye_of_newt 300 10
+9 bluewizhat 1 100
+10 blackwizhat 1 100
+
+goldshop 40 0
+0 gold_ring 0 1000
+1 sapphire_ring 0 1000
+2 emerald_ring 0 2000
+3 ruby_ring 0 2000
+4 diamond_ring 0 3000
+5 gold_necklace 0 1000
+6 sapphire_necklace 0 2000
+7 emerald_necklace 0 2000
+8 ruby_necklace 0 3000
+9 diamond_necklace 0 3000
+10 strung_gold_amulet 0 1000
+11 strung_sapphire_amulet 0 2000
+12 strung_emerald_amulet 0 3000
+13 strung_ruby_amulet 0 4000
+14 strung_diamond_amulet 0 5000
+
+fishingshop 40 0
+0 net 5 100
+1 fishing_rod 5 100
+2 fly_fishing_rod 5 100
+3 harpoon 2 400
+4 lobster_pot 2 400
+5 fishing_bait 1500 1
+6 feather 1000 1
+7 raw_shrimp 0 300
+8 raw_sardine 200 1
+9 raw_herring 0 900
+10 raw_anchovies 0 1200
+11 raw_trout 0 1500
+12 raw_pike 0 1800
+13 raw_salmon 0 2100
+14 raw_tuna 0 2300
+15 raw_lobster 0 2600
+16 raw_swordfish 0 2900
+
+wydinstore 40 0
+0 pot_flour 3 100
+1 raw_beef 1 100
+2 raw_chicken 1 100
+3 cabbage 3 100
+4 banana 3 100
+5 redberries 1 100
+6 bread 0 100
+7 chocolate_bar 1 100
+8 cheese 3 100
+9 tomato 3 100
+10 potato 1 100
+
+craftingshop 40 0
+0 chisel 2 100
+1 ring_mould 4 100
+2 necklace_mould 2 100
+3 amulet_mould 2 100
+4 needle 3 100
+5 thread 100 5
+6 holy_symbol_mould 3 100
+7 sickle_mould 6 15
+
+generalshop6 40 1
+0 pot_empty 3 100
+1 jug_empty 2 100
+2 shears 2 100
+3 bucket_empty 2 100
+4 tinderbox 2 100
+5 chisel 2 100
+6 hammer 5 100
+
+craftingshop_free 40 0
+0 chisel 2 100
+1 ring_mould 4 100
+2 necklace_mould 2 100
+3 amulet_mould 2 100
+4 needle 3 100
+5 thread 100 5
+6 holy_symbol_mould 3 100
+
+shilofishingshop 40 0
+0 fishing_rod 5 100
+1 fly_fishing_rod 5 100
+2 fishing_bait 200 1
+3 feather 800 1
+4 raw_trout 0 1500
+5 raw_pike 0 1800
+6 raw_salmon 0 2100
+
+shilojunglestore 40 1
+0 tinderbox 2 500
+1 vial_empty 10 500
+2 pestle_and_mortar 3 500
+3 pot_empty 3 500
+4 bronze_axe 3 500
+5 bronze_pickaxe 2 500
+6 iron_axe 5 700
+7 leather_armour 12 500
+8 leather_gloves 10 500
+9 leather_boots 10 500
+10 cooked_meat 2 500
+11 bread 10 500
+12 bronze_bar 10 500
+13 spade 10 500
+14 unlit_candle 10 500
+15 torch_unlit 10 500
+16 chisel 10 500
+17 hammer 10 500
+18 papyrus 50 200
+19 charcoal 50 200
+20 vial_water 50 200
+21 machette 50 200
+22 rope 10 200
+
+2handedshop 40 0
+0 bronze_2h_sword 4 200
+1 iron_2h_sword 3 300
+2 steel_2h_sword 2 500
+3 black_2h_sword 1 700
+4 mithril_2h_sword 1 1000
+5 adamant_2h_sword 1 15000
+
+herbloreshop 40 0
+0 vial_empty 800 100
+1 pestle_and_mortar 3 100
+2 eye_of_newt 800 20
+
+championshop 40 1
+0 blue_cape 2 1000
+1 black_full_helm 1 1000
+2 black_platelegs 1 20000
+3 adamant_platebody 1 8000
+
+runiteshop 40 0
+0 rune_plateskirt 1 12000
+1 rune_platelegs 1 11500
+2 rune_mace 1 7000
+3 rune_chainbody 1 15000
+4 rune_longsword 1 14000
+5 rune_sword 1 10000
+6 dragonhide_chaps 1 500
+7 dragon_vambraces 1 500
+8 coif 2 1000
+
+armourshop 40 0
+0 bronze_chainbody 5 100
+1 iron_chainbody 3 200
+2 steel_chainbody 3 400
+3 mithril_chainbody 1 3000
+4 bronze_platebody 3 100
+5 iron_platebody 1 200
+6 steel_platebody 1 400
+7 mithril_platebody 1 3000
+8 black_platebody 1 3000
+9 iron_platelegs 1 100
+10 studded_body 1 700
+11 studded_chaps 1 700
+
+generalshop2 40 1
+0 pot_empty 3 100
+1 jug_empty 2 100
+2 shears 2 100
+3 bucket_empty 2 100
+4 tinderbox 2 100
+5 chisel 2 100
+6 hammer 5 100
+
+runeshop 40 0
+0 firerune 2000 10
+1 waterrune 2000 10
+2 airrune 2000 10
+3 earthrune 2000 10
+4 mindrune 1000 10
+5 bodyrune 1000 10
+6 chaosrune 1000 100
+7 deathrune 1000 150
+
+swordshop 40 0
+0 bronze_sword 5 100
+1 iron_sword 4 200
+2 steel_sword 4 400
+3 black_sword 3 1000
+4 mithril_sword 3 3000
+5 adamant_sword 2 12000
+6 bronze_longsword 4 100
+7 iron_longsword 3 200
+8 steel_longsword 3 400
+9 black_longsword 2 1000
+10 mithril_longsword 2 3000
+11 adamant_longsword 1 12000
+12 bronze_dagger 10 100
+13 iron_dagger 6 200
+14 steel_dagger 5 400
+15 black_dagger 4 1000
+16 mithril_dagger 3 3000
+17 adamant_dagger 2 12000
+
+archeryshop 40 0
+0 bronze_arrow 2000 10
+1 iron_arrow 1500 15
+2 steel_arrow 1000 20
+3 bolt 1500 10
+4 shortbow 4 100
+5 longbow 4 100
+6 oak_shortbow 2 200
+7 oak_longbow 2 200
+8 crossbow 2 400
+
+fancyclothesstore 40 0
+0 chefs_hat 0 100
+1 bluewizhat 3 100
+2 yellow_cape 1 100
+3 grey_wolf_fur 3 100
+4 fur 3 100
+5 needle 3 100
+6 thread 100 5
+7 leather_gloves 10 100
+8 leather_boots 10 100
+9 priest_robe 3 100
+10 priest_gown 3 100
+11 brown_apron 1 100
+12 pink_skirt 5 100
+13 black_skirt 3 100
+14 blue_skirt 2 100
+15 red_cape 4 100
+16 eye_patch 3 2000
+
+staffshop 40 0
+0 plainstaff 5 100
+1 magic_staff 5 200
+2 staff_of_air 2 1000
+3 staff_of_water 2 1000
+4 staff_of_earth 2 1000
+5 staff_of_fire 2 1000
+
+memberstaffshop 40 0
+0 battlestaff 5 100
+1 plainstaff 5 100
+2 magic_staff 5 200
+3 staff_of_air 2 1000
+4 staff_of_water 2 1000
+5 staff_of_earth 2 1000
+6 staff_of_fire 2 1000
+
+clotheshop 40 0
+0 white_apron 3 100
+1 leather_armour 12 100
+2 leather_gloves 10 100
+3 leather_boots 10 100
+4 brown_apron 1 100
+5 pink_skirt 5 100
+6 black_skirt 3 100
+7 blue_skirt 2 100
+8 red_cape 4 100
+9 silk 5 500
+10 priest_robe 3 100
+11 priest_gown 3 100
+
+teashop 40 0
+0 cup_of_tea 20 50
+
+taxfree 40 1
+0 pot_empty 3 100
+1 jug_empty 2 100
+2 tinderbox 2 100
+3 chisel 2 100
+4 hammer 5 100
+5 bronze_pickaxe 5 100
+6 bronze_axe 10 100
+
+pizzabaseshop 40 0
+0 pizza_base 30 100
+
+generalshopogre 40 1
+0 pot_empty 3 100
+1 jug_empty 2 100
+2 knife 2 100
+3 bucket_empty 2 100
+4 tinderbox 2 100
+5 chisel 2 100
+6 hammer 5 100
+
+herbloreshopogre 40 1
+0 vial_empty 50 100
+1 pestle_and_mortar 3 100
+2 eye_of_newt 50 20
+
+cookeryshop 40 0
+0 piedish 5 200
+1 cooking_apple 2 200
+2 cake_tin 2 200
+3 bowl_empty 2 200
+4 potato 5 200
+5 tinderbox 4 200
+6 jug_empty 1 100
+7 pot_empty 8 100
+8 chocolate_bar 2 100
+9 pot_flour 8 100
+
+magicguildshop 40 0
+0 firerune 3000 18
+1 waterrune 3000 18
+2 airrune 3000 18
+3 earthrune 3000 18
+4 mindrune 3000 18
+5 bodyrune 3000 18
+6 soulrune 50 100
+7 battlestaff 5 90
+8 staff_of_air 2 1000
+9 staff_of_water 2 1000
+10 staff_of_earth 2 1000
+11 staff_of_fire 2 1000
+12 naturerune 1000 300
+13 chaosrune 1000 100
+14 bloodrune 1000 300
+15 lawrune 1000 300
+16 deathrune 1000 150
+
+ranging_guild_bowshop 40 0
+0 arrow_shaft 1000 50
+1 bronze_arrowheads 500 10
+2 iron_arrowheads 400 20
+3 steel_arrowheads 300 30
+4 mithril_arrowheads 200 40
+5 adamant_arrowheads 200 50
+6 rune_arrowheads 150 60
+7 bronze_arrow 1000 10
+8 iron_arrow 500 20
+9 steel_arrow 500 40
+10 mithril_arrow 500 60
+11 adamant_arrow 450 120
+12 rune_arrow 400 130
+13 shortbow 20 50
+14 oak_shortbow 20 60
+15 willow_shortbow 20 70
+16 longbow 20 50
+17 oak_longbow 20 60
+18 willow_longbow 20 70
+
+ranging_guild_armourshop 40 0
+0 leather_armour 10 50
+1 hardleather_body 10 60
+2 studded_body 10 70
+3 leather_chaps 20 50
+4 studded_chaps 15 80
+5 coif 10 50
+6 leather_cowl 10 70
+7 leather_vambraces 10 150
+
+ranging_guild_tribalshop 40 0
+0 bronze_javelin 900 20
+1 iron_javelin 800 20
+2 steel_javelin 700 40
+3 mithril_javelin 600 60
+4 adamant_javelin 500 80
+5 rune_javelin 400 100
+6 bronze_thrownaxe 900 20
+7 iron_thrownaxe 800 20
+8 steel_thrownaxe 700 40
+9 mithril_thrownaxe 600 60
+10 adamnt_thrownaxe 500 80
+11 rune_thrownaxe 400 100
+
+crafting_make_rings 6 0
+0 gold_ring 1 0
+
+crafting_make_necklaces 6 0
+0 gold_necklace 1 0
+
+crafting_make_amulets 6 0
+0 unstrung_gold_amulet 1 0
+
+fishingguild 40 0
+0 fishing_bait 2000 1
+1 feather 1500 1
+2 raw_cod 0 300
+3 raw_mackerel 0 600
+4 raw_bass 0 900
+5 raw_tuna 0 2300
+6 raw_lobster 0 2600
+7 raw_swordfish 0 2900
+8 cod 0 300
+9 mackerel 0 600
+10 bass 0 900
+11 tuna 0 2300
+12 lobster 0 2600
+13 swordfish 0 2900
+

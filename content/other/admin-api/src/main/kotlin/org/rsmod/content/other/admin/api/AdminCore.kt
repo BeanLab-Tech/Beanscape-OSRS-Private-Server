@@ -52,6 +52,9 @@ public fun interface TokenStore {
 public interface AdminBackend {
     public fun players(): Map<String, Any?>
 
+    /** Discord picture link and name for an account, or an empty map when there is none. */
+    public fun identity(accountId: Int): Map<String, Any?> = emptyMap()
+
     public fun player(name: String): Map<String, Any?>
 
     /** Rank of an online player, or null when they are not online. */

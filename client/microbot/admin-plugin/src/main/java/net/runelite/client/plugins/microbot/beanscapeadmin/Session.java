@@ -29,6 +29,8 @@ final class Session
 		final String modlevel;
 		final String area;
 		final String coords;
+		final String avatar;
+		final String discord;
 
 		Player(JsonObject json)
 		{
@@ -37,6 +39,8 @@ final class Session
 			modlevel = str(json, "modlevel");
 			area = str(json, "area");
 			coords = str(json, "coords");
+			avatar = str(json, "avatar");
+			discord = str(json, "discord");
 		}
 
 		/** Where they are, in words when the server knows the area and as coordinates otherwise. */
@@ -56,11 +60,15 @@ final class Session
 	private final ApiClient api = new ApiClient(() -> settings[0]);
 	private final SkillIconManager skillIcons;
 	private final List<Runnable> listeners = new ArrayList<>();
+	private final Avatars avatars = new Avatars();
+	private static final java.awt.image.BufferedImage EMPTY = new java.awt.image.BufferedImage(1, 1, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+	private final Image[] bundledSkillIcons = new Image[Skill.values().length + 1];
 
 	private volatile boolean connected;
 	private volatile String error = "Connecting";
 	private volatile String myName = "";
 	private volatile String myLevel = "player";
+	private volatile String myAvatar = "";
 	private volatile List<Player> players = new ArrayList<>();
 	private volatile JsonObject world = new JsonObject();
 	private volatile String selected = "";
@@ -78,6 +86,7 @@ final class Session
 	void stop()
 	{
 		pool.shutdownNow();
+		avatars.shutdown();
 	}
 
 	void reload()
@@ -114,6 +123,16 @@ final class Session
 	String myLevel()
 	{
 		return myLevel;
+	}
+
+	String myAvatar()
+	{
+		return myAvatar;
+	}
+
+	Avatars avatars()
+	{
+		return avatars;
 	}
 
 	List<Player> players()
@@ -165,16 +184,65 @@ final class Session
 		listeners.add(listener);
 	}
 
+	/** The skill's sprite; null asks for the total-level icon (the client's OVERALL constant is unusable). */
+	/* The skill's sprite: the client's icon manager first, the sprite bundled in the client jar otherwise. */
 	Image skillIcon(Skill skill)
 	{
 		try
 		{
-			return skillIcons == null ? null : skillIcons.getSkillImage(skill, true);
+			Image image = skillIcons == null || skill == null ? null : skillIcons.getSkillImage(skill, true);
+			if (image != null)
+			{
+				return image;
+			}
 		}
 		catch (RuntimeException ex)
 		{
-			return null;
+			// Fall through to the bundled sprite.
 		}
+		return bundled(skill);
+	}
+
+	private synchronized Image bundled(Skill skill)
+	{
+		int slot = skill == null ? bundledSkillIcons.length - 1 : skill.ordinal();
+		Image known = bundledSkillIcons[slot];
+		if (known == null)
+		{
+			known = EMPTY;
+			String path = "/skill_icons_small/" + (skill == null ? "overall" : skill.getName().toLowerCase()) + ".png";
+			try (java.io.InputStream in = SkillIconManager.class.getResourceAsStream(path))
+			{
+				Image read = in == null ? null : javax.imageio.ImageIO.read(in);
+				if (read != null)
+				{
+					known = read;
+				}
+			}
+			catch (java.io.IOException | RuntimeException ex)
+			{
+				// No bundled sprite: callers draw the skill's short name.
+			}
+			bundledSkillIcons[slot] = known;
+		}
+		return known == EMPTY ? null : known;
+	}
+
+	/** Discord picture link for a player or account name; empty when we do not know one. */
+	String avatarOf(String name)
+	{
+		if (name.equalsIgnoreCase(myName))
+		{
+			return myAvatar;
+		}
+		for (Player p : players)
+		{
+			if (p.name.equalsIgnoreCase(name))
+			{
+				return p.avatar;
+			}
+		}
+		return "";
 	}
 
 	/** Runs [work] off the UI thread, then hands the result (or a readable error) back on it. */
@@ -211,6 +279,7 @@ final class Session
 			JsonObject me = api.get("/v1/me");
 			myName = str(me, "name");
 			myLevel = str(me, "modlevel");
+			myAvatar = str(me, "avatar");
 			List<Player> next = new ArrayList<>();
 			JsonObject list = api.get("/v1/players");
 			if (list.has("players"))
