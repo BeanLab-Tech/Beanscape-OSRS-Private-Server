@@ -1,34 +1,49 @@
 <#
 .SYNOPSIS
-    Installs or updates the BeanLab Microbot client from GitHub main.
+    Installs or updates the BeanLab Microbot client. One double-click, no Python.
 
 .DESCRIPTION
-    - Downloads Microbot 2.0.20 into <ClientDir>\original if it is missing, and verifies its SHA-256.
-    - Fetches the latest patch-microbot.py, Play-Microbot.bat, CLIENT_BUILD and SERVER_MODULUS from
-      the repo, re-patches the jar, installs the launcher and clears the client's stale HTTP cache.
-    - Keeps a copy of itself in <ClientDir> so the next update is one double-click/command away.
-    Close Microbot first (the jar is locked while it runs), or pass -CloseRunning.
-    Requires Python 3.10+ (for the patch) and Java 21 (to play).
+    Downloads the ALREADY-patched Microbot jar from the server (the server does the patching),
+    verifies its SHA-256, installs Play-Microbot.bat and clears the client's stale HTTP cache.
+    The laptop therefore needs only Java 21 and Tailscale - no Python, no original Microbot jar,
+    no local patch step. Close Microbot first (the jar is locked while it runs), or pass -CloseRunning.
+
+    The server publishes the current build number, version and the jar's SHA-256 at:
+        <server>/runelite/client/CURRENT            build number (e.g. 4)
+        <server>/runelite/client/<build>.txt        the real version (e.g. 2.6.65)
+        <server>/runelite/microbot-jar.sha256       expected SHA-256 of the jar
+        <server>/runelite/microbot-<version>-beanlab.jar   the patched jar itself
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\Desktop\OSRS-Microbot-Client\Update-Client.ps1"
 #>
 param(
     [string]$ClientDir = "$env:USERPROFILE\Desktop\OSRS-Microbot-Client",
-    [string]$Ref = "main",
+    [string]$Server = "https://runescape-server.tail5475a4.ts.net",
     [switch]$CloseRunning
 )
 $ErrorActionPreference = "Stop"
-$Repo = "https://raw.githubusercontent.com/BeanLab-Tech/Beanscape-OSRS-Private-Server/$Ref/client/microbot"
-$MicrobotUrl = "https://github.com/chsami/Microbot/releases/download/2.0.20/microbot-2.0.20.jar"
-$MicrobotSha = "95A652D44AFE867B5B18879EF5DDF56EFB0F0A43B005E26C7018EAFDE8587DD6"
-$Jar = "microbot-2.0.20-beanlab.jar"
+$Server = $Server.TrimEnd('/')
 
 function Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
+function Fetch($url, $out) {
+    Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing
+}
+function FetchText($url) {
+    # PowerShell 5.1 returns [byte[]] for text/plain responses and [String] for others.
+    # Normalize to a string first, then trim.
+    $c = (Invoke-WebRequest -Uri $url -UseBasicParsing).Content
+    if ($c -is [System.Byte[]]) {
+        return [System.Text.Encoding]::UTF8.GetString($c).Trim()
+    }
+    return $c.Trim()
+}
 
-# 0. Microbot must not be running from this folder (Windows locks the jar).
+New-Item -ItemType Directory -Force $ClientDir | Out-Null
+
+# 0. Microbot must not be running (Windows locks the jar). Find it by the jar name in the command line.
 $running = Get-CimInstance Win32_Process -Filter "Name like 'java%'" |
-    Where-Object { $_.CommandLine -like "*$Jar*" }
+    Where-Object { $_.CommandLine -like "*-beanlab.jar*" }
 if ($running) {
     if (-not $CloseRunning) {
         Write-Host "Microbot is running. Close it (or rerun with -CloseRunning), then run this again." -ForegroundColor Yellow
@@ -39,43 +54,38 @@ if ($running) {
     Start-Sleep 3
 }
 
-# Works in Windows PowerShell 5.1 and PowerShell 7 (no ?? operator).
-$python = Get-Command python -ErrorAction SilentlyContinue
-if (-not $python) { $python = Get-Command py -ErrorAction SilentlyContinue }
-if (-not $python) { throw "Python 3.10+ is required: winget install Python.Python.3.12" }
+# 1. Ask the server what the current client is.
+Step "Asking server for current client ($Server)"
+$build   = (FetchText "$Server/runelite/client/CURRENT")
+$version = (FetchText "$Server/runelite/client/$build.txt")
+$sha     = (FetchText "$Server/runelite/microbot-jar.sha256").Split(' ')[0].ToUpper()
+$jarName = "microbot-$version-beanlab.jar"
+Write-Host "    current client: Microbot $version (build $build)"
 
-New-Item -ItemType Directory -Force "$ClientDir\original", "$ClientDir\updater" | Out-Null
-
-# 1. Original Microbot 2.0.20 (download once, always verify).
-$original = "$ClientDir\original\microbot-2.0.20.jar"
-if (-not (Test-Path $original)) {
-    Step "Downloading Microbot 2.0.20"
-    Invoke-WebRequest -Uri $MicrobotUrl -OutFile $original -UseBasicParsing
+# 2. Download the patched jar from the server and verify it.
+Step "Downloading $jarName from server"
+$jar = "$ClientDir\$jarName"
+if (Test-Path $jar) { Remove-Item -Force $jar }
+Fetch "$Server/runelite/$jarName" $jar
+$actual = (Get-FileHash $jar -Algorithm SHA256).Hash
+if ($actual -ne $sha) {
+    Remove-Item -Force $jar
+    throw "SHA-256 mismatch: server expected $sha but got $actual. Delete $jarName and rerun."
 }
-if ((Get-FileHash $original -Algorithm SHA256).Hash -ne $MicrobotSha) {
-    throw "$original is not the expected Microbot 2.0.20 (SHA-256 mismatch). Delete it and rerun."
-}
+Write-Host "    verified: $actual"
 
-# 2. Latest client files from the repo.
-Step "Fetching client files from GitHub ($Ref)"
-foreach ($f in "patch-microbot.py", "Play-Microbot.bat", "CLIENT_BUILD", "SERVER_MODULUS", "Update-Client.ps1") {
-    Invoke-WebRequest -Uri "$Repo/$f" -OutFile "$ClientDir\updater\$f" -UseBasicParsing
-}
-$build = (Get-Content "$ClientDir\updater\CLIENT_BUILD" -Raw).Trim()
-$modulus = (Get-Content "$ClientDir\updater\SERVER_MODULUS" -Raw).Trim()
-$installed = if (Test-Path "$ClientDir\CLIENT_BUILD") { (Get-Content "$ClientDir\CLIENT_BUILD" -Raw).Trim() } else { "none" }
-
-# 3. Patch, then swap the jar in.
-Step "Patching client build $build (installed: $installed)"
-& $python.Source -I "$ClientDir\updater\patch-microbot.py" $original "$ClientDir\updater\$Jar" $modulus
-if ($LASTEXITCODE -ne 0) { throw "patch-microbot.py failed" }
-Move-Item -Force "$ClientDir\updater\$Jar" "$ClientDir\$Jar"
-Copy-Item -Force "$ClientDir\updater\Play-Microbot.bat" "$ClientDir\Play-Microbot.bat"
-Copy-Item -Force "$ClientDir\updater\Update-Client.ps1" "$ClientDir\Update-Client.ps1"
+# 3. Install the launcher and this updater (fetched from the repo so they track main).
+Step "Installing launcher"
+$raw = "https://raw.githubusercontent.com/BeanLab-Tech/Beanscape-OSRS-Private-Server/main/client/microbot"
+Copy-Item -Force "$ClientDir\Play-Microbot.bat" "$ClientDir\Play-Microbot.bat.bak" -ErrorAction SilentlyContinue
+try { Fetch "$raw/Play-Microbot.bat" "$ClientDir\Play-Microbot.bat" }
+catch { if (-not (Test-Path "$ClientDir\Play-Microbot.bat")) { throw "launcher missing and repo fetch failed" } }
 Set-Content -Path "$ClientDir\CLIENT_BUILD" -Value $build -NoNewline
+Set-Content -Path "$ClientDir\CLIENT_VERSION" -Value $version -NoNewline
+Copy-Item -Force "$PSCommandPath" "$ClientDir\Update-Client.ps1" -ErrorAction SilentlyContinue
 
 # 4. Drop cached server config so the next launch fetches the current jav_config/world list.
 Remove-Item -Recurse -Force "$ClientDir\home\.runelite\cache\okhttp" -ErrorAction SilentlyContinue
 
 Write-Host ""
-Write-Host "BeanLab client is up to date (build $build). Start it with Play-Microbot.bat." -ForegroundColor Green
+Write-Host "BeanLab client is up to date (Microbot $version, build $build). Start it with Play-Microbot.bat." -ForegroundColor Green
