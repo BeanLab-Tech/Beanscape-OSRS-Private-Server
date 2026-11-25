@@ -9,7 +9,7 @@ bound user with the bot token already on the VM and writes only the avatar hash.
     sudo python3 scripts/backfill_discord_avatars.py --all          # refresh everyone
     python3 scripts/backfill_discord_avatars.py --dry-run
 
-Needs the V13 migration (the server applies it on start). The bot token is read from a file and is
+Needs the V15 migration (the server applies it on start). The bot token is read from a file and is
 never printed. Discord rate limits user lookups, so the script paces itself and honours
 Retry-After.
 """

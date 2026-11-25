@@ -39,7 +39,7 @@ Icons were fetched from the wiki by item name only, so duplicate or oddly named 
 
 ### Discord profile pictures for accounts
 
-Players, Accounts, the Items target and the sidebar now show a round Discord avatar. Migration `V13__discord_avatar.sql` adds `accounts.discord_avatar`; Discord registration stores the hash at sign-in (and refreshes it when a bound user signs in again); `/v1/players`, `/v1/accounts` and `/v1/me` return `avatar` and `discord`. Accounts with no stored hash get Discord's default avatar for their id. Run `scripts/backfill_discord_avatars.py` on the VM once to fill in existing accounts with their real pictures. Needs the server rebuild and restart to apply the migration. The server tests pass locally (28); not yet run against the live server.
+Players, Accounts, the Items target and the sidebar now show a round Discord avatar. Migration `V15__discord_avatar.sql` adds `accounts.discord_avatar`; Discord registration stores the hash at sign-in (and refreshes it when a bound user signs in again); `/v1/players`, `/v1/accounts` and `/v1/me` return `avatar` and `discord`. Accounts with no stored hash get Discord's default avatar for their id. Run `scripts/backfill_discord_avatars.py` on the VM once to fill in existing accounts with their real pictures. Needs the server rebuild and restart to apply the migration. The server tests pass locally (28); not yet run against the live server.
 
 ### Launcher rebuilt around the OPClient layout
 
