@@ -6,7 +6,7 @@ Status: draft for review, nothing built. Working title; rename freely.
 
 One walkable hub with everything a player needs between trips: a bank, a Grand Exchange, a
 ring of shops, and message boards. It is reached from the Soul Wars portal at the Grand Exchange
-and replaces the blank 100x100 arena (x 9024-9123, z 3072-3171, four packed map squares). The
+and replaces the blank 100x100 arena (x 5120-5219, z 3072-3171, four packed map squares). The
 Exchange portal stays where it is; the hub is the destination.
 
 ## Layout (100 x 100, north is up)
@@ -37,7 +37,7 @@ Exchange portal stays where it is; the hub is the destination.
 | Bank | Generic bank booth handler | Place booths and a banker |
 | Grand Exchange | Full matching engine (`GeBook`), persistence, `::ge` commands | A clerk "Exchange" option; today there is no interface, only commands. Cache has `ge_clerk_1..4` NPCs |
 | Message boards | Cache has the `noticeboard` loc; nothing handles it | New: a database table (author, text, time), a read dialog, a post command, owner/admin delete |
-| Ground and walls | Flat grass terrain packed (`m141_48` to `m142_49`) | Floors, paths and walls: new terrain files, or runtime-spawned wall locs |
+| Ground and walls | Flat grass terrain packed (`m80_48` to `m81_49`) | Floors, paths and walls: new terrain files, or runtime-spawned wall locs |
 
 ## Phases
 

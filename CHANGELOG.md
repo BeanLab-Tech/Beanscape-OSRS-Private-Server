@@ -4,6 +4,14 @@ Bug fixes for the Beanscape server, launcher, and admin plugin. Add new entries 
 
 ## 2026-11-25
 
+### Market Hub is now a layout file
+
+The hub is described by `hub-layout.json` (floors, rooms with walls and doors, objects, NPCs, arrival and leave-portal tiles) instead of code. It is validated on load with every problem listed, a bad override at `.data/hub-layout.json` is ignored with a warning, and objects, NPCs and walls can change with only a restart. Floors still need `generateHubTerrain` and a cache repack. The converted layout reproduces the previous terrain byte for byte. Format and workflow: `docs/HUB_LAYOUT.md`. This is the base for the planned web editor, in-game commands and client plugin tab.
+
+### Hub walls and portal were invisible: the hub sat in the instance area
+
+The Market Hub was at x 9024, inside the tiles the engine reserves for instances (x 6432 and up). Objects placed there go to the instance registry instead of normal zone storage, so the walls, boards and leave portal were never sent to the client; only the NPCs and floor showed. The hub now sits at x 5120 to 5219 (map squares 80 to 81), below that area. Needs a cache repack and a server restart.
+
 ### Agility, Slayer, Hunter, Farming and Construction had no content; crafting and thieving extras
 
 The last five skills answered "Nothing interesting happens." Each now has its own module. Agility: the Gnome Stronghold, Barbarian Outpost and Draynor rooftop courses, with lap bonuses and marks of grace. Slayer: all nine masters assign tasks from the cache's own task tables, kills count by the npc's slayer category, and points, the enchanted gem and a slayer shop work. Hunter: bird snares, box traps (ferrets and chinchompas), butterfly and impling nets, and impling jars. Farming: allotments, herbs, flowers and hops grow in real patches, also while logged out. Construction: sawmill planks and a starter house (garden, parlour, workshop) with build mode and furniture. Crafting now makes gold and silver jewellery, strings amulets and dyes capes; Thieving adds trapped chests, lock-picking doors, and stall owners and guards who notice thefts. Locked doors no longer open for free. Needs a server restart with the V16 migration. Relog after it comes back.
@@ -18,7 +26,7 @@ The in-client admin API was switched off by the `ADMIN_API_ENABLED=false` system
 
 ### Soul Wars portal at the Grand Exchange
 
-New module `beanlab-soulwars`. RsMod has no Soul Wars content, so the cache's `soul_wars_edgeville_portal` was never placed or handled. It is now spawned at the Grand Exchange (3165, 3489) and teleports to a blank 100x100 walkable arena at (9024-9123, 3072-3171), well outside every real map square. Its flat terrain (four map squares, `m141_48` to `m142_49`, plus empty `l` files) is packed into the cache by the module's `MapTileBuilder` and `MapLocSpawnBuilder`, so the client has ground to draw. Its edges are blocked, and a Soul Wars leave portal inside returns to the Exchange. To deploy, stop `osrs-server`, run `./gradlew packCache` in the VM checkout, then start the server. Without the pack step the portal works but the arena draws as void.
+New module `beanlab-soulwars`. RsMod has no Soul Wars content, so the cache's `soul_wars_edgeville_portal` was never placed or handled. It is now spawned at the Grand Exchange (3165, 3489) and teleports to a blank 100x100 walkable arena at (5120-5219, 3072-3171), well outside every real map square. Its flat terrain (four map squares, `m80_48` to `m81_49`, plus empty `l` files) is packed into the cache by the module's `MapTileBuilder` and `MapLocSpawnBuilder`, so the client has ground to draw. Its edges are blocked, and a Soul Wars leave portal inside returns to the Exchange. To deploy, stop `osrs-server`, run `./gradlew packCache` in the VM checkout, then start the server. Without the pack step the portal works but the arena draws as void.
 
 ### Launcher and plugins now live in the GitHub repo
 

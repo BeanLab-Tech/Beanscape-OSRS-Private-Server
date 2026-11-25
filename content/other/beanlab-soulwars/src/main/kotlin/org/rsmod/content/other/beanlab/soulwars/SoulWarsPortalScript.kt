@@ -11,8 +11,10 @@ import org.rsmod.api.script.onOpLoc2
 import org.rsmod.game.entity.Npc
 import org.rsmod.game.loc.LocAngle
 import org.rsmod.game.loc.LocShape
+import org.rsmod.game.type.loc.LocType
 import org.rsmod.game.type.loc.LocTypeList
 import org.rsmod.game.type.npc.NpcTypeList
+import org.rsmod.game.type.npc.UnpackedNpcType
 import org.rsmod.map.CoordGrid
 import org.rsmod.plugin.scripts.PluginScript
 import org.rsmod.plugin.scripts.ScriptContext
@@ -24,13 +26,13 @@ import org.rsmod.routefinder.flag.CollisionFlag
  *
  * In the cache the Soul Wars portal is the loc `soul_wars_edgeville_portal` (the one that sits in
  * Edgeville in the real game). RsMod ships no Soul Wars content, so nothing places or handles it:
- * the portal is spawned here on [GameLifecycle.Startup] and its "Enter" option teleports to
- * [ARENA_ENTRY]. A `soul_wars_leave_soulwars_portal` in the hub returns to the Exchange.
+ * the portal is spawned here on [GameLifecycle.Startup] and its "Enter" option teleports to the
+ * hub's arrival tile. A `soul_wars_leave_soulwars_portal` in the hub returns to the Exchange.
  *
- * The hub is [HubLayout.SIZE] x [HubLayout.SIZE] tiles at [ARENA_MIN], outside every real map
- * square. Its floors come from [HubLayout.floorAt], packed into the cache by `map/SoulWarsMapTiles`
- * when the `packCache` task runs (the test regenerates the files if the layout changes). Walls,
- * shopkeepers, bankers and clerks are spawned from the same layout at startup. The server allocates
+ * The hub is a [HubMap] (`hub-layout.json`, or an override file, see [HubMapLoader]) of up to 128 x
+ * 128 tiles at [ARENA_MIN], outside every real map square. Its floors are packed into the cache by
+ * `map/SoulWarsMapTiles` when the `packCache` task runs (`generateHubTerrain` rewrites them from
+ * the layout). Walls, objects and NPCs are spawned from the layout at startup. The server allocates
  * the collision zones itself and blocks everything outside the hub.
  */
 class SoulWarsPortalScript
@@ -51,79 +53,76 @@ constructor(
             logger.warn { "[soulwars] portal locs missing from this cache; nothing registered" }
             return
         }
-        onOpLoc1(enter) { teleport(ARENA_ENTRY) }
-        onOpLoc2(enter) { teleport(ARENA_ENTRY) }
+        val loaded = HubMapLoader.load()
+        for (problem in loaded.problems) logger.warn { "[soulwars] layout: $problem" }
+        val map = loaded.map
+        val entry = local(map.arrival.x, map.arrival.z)
+        onOpLoc1(enter) { teleport(entry) }
+        onOpLoc2(enter) { teleport(entry) }
         onOpLoc1(leave) { teleport(EXCHANGE_EXIT) }
         onOpLoc2(leave) { teleport(EXCHANGE_EXIT) }
         onEvent<GameLifecycle.Startup> {
-            buildArena()
-            locRepo.add(
-                EXCHANGE_PORTAL,
-                enter,
-                Int.MAX_VALUE,
-                LocAngle.South,
-                LocShape.CentrepieceStraight,
-            )
-            locRepo.add(
-                ARENA_EXIT_PORTAL,
-                leave,
-                Int.MAX_VALUE,
-                LocAngle.South,
-                LocShape.CentrepieceStraight,
-            )
-            val walls = buildWalls()
-            val npcs = spawnNpcs()
+            buildArena(map.size)
+            val shape = LocShape.CentrepieceStraight
+            locRepo.add(EXCHANGE_PORTAL, enter, Int.MAX_VALUE, LocAngle.South, shape)
+            val exit = local(map.leavePortal.x, map.leavePortal.z)
+            locRepo.add(exit, leave, Int.MAX_VALUE, LocAngle.South, shape)
+            val placed = buildLocs(map)
+            val npcs = spawnNpcs(map)
             logger.info {
                 "[soulwars] portal at $EXCHANGE_PORTAL -> hub at $ARENA_MIN " +
-                    "($walls walls, $npcs npcs)"
+                    "(layout: ${loaded.source}, $placed objects, $npcs npcs)"
             }
         }
     }
 
     /** Allocates the zones covering the arena and blocks every tile outside it. */
-    private fun buildArena() {
-        val zones = (HubLayout.SIZE + ZONE - 1) / ZONE
+    private fun buildArena(size: Int) {
+        val zones = (size + ZONE - 1) / ZONE
         val span = zones * ZONE
         for (dx in 0 until span) {
             for (dz in 0 until span) {
                 val x = ARENA_MIN.x + dx
                 val z = ARENA_MIN.z + dz
-                val inside = dx < HubLayout.SIZE && dz < HubLayout.SIZE
+                val inside = dx < size && dz < size
                 collision[x, z, ARENA_MIN.level] = if (inside) 0 else CollisionFlag.BLOCK_WALK
             }
         }
     }
 
-    private fun buildWalls(): Int {
-        val wall = locTypes.values.firstOrNull { it.internalName == WALL }
-        if (wall == null) {
-            logger.warn { "[soulwars] wall loc $WALL missing from this cache; no walls placed" }
-            return 0
-        }
+    private fun buildLocs(map: HubMap): Int {
+        val byName = HashMap<String, LocType>()
+        for (type in locTypes.values) type.internalName?.let { byName[it] = type }
+        val missing = HashSet<String>()
+
+        fun type(name: String): LocType? =
+            byName[name]
+                ?: run {
+                    if (missing.add(name)) logger.warn { "[soulwars] loc $name missing; skipped" }
+                    null
+                }
+
         var placed = 0
-        val pieces =
-            (HubLayout.SHOPS + HubLayout.EXCHANGE).flatMap(HubLayout::walls) + HubLayout.boardWall()
-        for (piece in pieces) {
+        for (piece in map.wallPieces()) {
+            val wall = type(piece.loc) ?: continue
             val shape = if (piece.corner) LocShape.WallL else LocShape.WallStraight
             locRepo.add(local(piece.x, piece.z), wall, Int.MAX_VALUE, piece.angle, shape)
             placed++
         }
-        val board = locTypes.values.firstOrNull { it.internalName == BOARD }
-        if (board != null) {
-            for (x in HubLayout.BOARD_XS) {
-                val at = local(x, HubLayout.BOARD_Z)
-                val shape = LocShape.WallDecorStraightNoOffset
-                locRepo.add(at, board, Int.MAX_VALUE, LocAngle.North, shape)
-                placed++
-            }
+        for (loc in map.locs) {
+            val type = type(loc.loc) ?: continue
+            locRepo.add(local(loc.x, loc.z), type, Int.MAX_VALUE, loc.angle, loc.shape)
+            placed++
         }
         return placed
     }
 
-    private fun spawnNpcs(): Int {
+    private fun spawnNpcs(map: HubMap): Int {
+        val byName = HashMap<String, UnpackedNpcType>()
+        for (type in npcTypes.values) type.internalName?.let { byName[it] = type }
         var placed = 0
-        for (spawn in HubLayout.SPAWNS) {
-            val type = npcTypes.values.firstOrNull { it.internalName == spawn.npc }
+        for (spawn in map.npcs) {
+            val type = byName[spawn.npc]
             if (type == null) {
                 logger.warn { "[soulwars] npc ${spawn.npc} missing from this cache; skipped" }
                 continue
@@ -139,16 +138,13 @@ constructor(
     private companion object {
         const val ENTER_PORTAL = "soul_wars_edgeville_portal"
         const val LEAVE_PORTAL = "soul_wars_leave_soulwars_portal"
-        const val WALL = "blackpaintedbrickwall_1"
-        const val BOARD = "noticeboard"
         const val ZONE = 8
 
-        /** South-west corner of the hub (zone aligned, outside all real map squares). */
-        val ARENA_MIN = CoordGrid(9024, 3072, 0)
-        val ARENA_ENTRY =
-            CoordGrid(ARENA_MIN.x + HubLayout.ARRIVAL_X, ARENA_MIN.z + HubLayout.ARRIVAL_Z, 0)
-        val ARENA_EXIT_PORTAL =
-            CoordGrid(ARENA_MIN.x + HubLayout.PORTAL_X, ARENA_MIN.z + HubLayout.PORTAL_Z, 0)
+        /**
+         * South-west corner of the hub: zone aligned, outside all real map squares, and below x
+         * 6432, where the engine reserves tiles for instances ([org.rsmod.api.registry.region]).
+         */
+        val ARENA_MIN = CoordGrid(5120, 3072, 0)
 
         /** Grand Exchange plaza (the ::tp "Grand Exchange" entry is 3164, 3486). */
         val EXCHANGE_PORTAL = CoordGrid(3172, 3489, 0)
