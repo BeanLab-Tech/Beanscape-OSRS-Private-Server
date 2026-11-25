@@ -1092,3 +1092,22 @@ fishingguild 40 0
 12 lobster 0 2600
 13 swordfish 0 2900
 
+slayershop 40 0
+0 slayer_gem 10 100
+1 slayer_nosepeg 10 100
+2 slayer_earmuffs 10 100
+3 slayer_facemask 10 100
+4 slayer_bag_of_salt 100 100
+5 slayer_rock_hammer 10 100
+6 slayer_mirror_shield 10 100
+7 wallbeast_spike_helmet 10 100
+8 slayer_icy_water 100 100
+9 slayer_fungicide 10 100
+10 slayer_leafbladed_spear 5 100
+11 slayer_boots 10 100
+12 boots_of_stone 10 100
+13 witchwood_icon 10 100
+14 slayer_buglan_off 10 100
+15 slayer_staff 10 100
+16 slayer_broad_arrows 1000 100
+17 slayer_ring_8 10 100

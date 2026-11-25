@@ -4,12 +4,15 @@ import com.github.michaelbull.logging.InlineLogger
 import jakarta.inject.Inject
 import org.rsmod.api.config.refs.stats
 import org.rsmod.api.game.process.GameLifecycle
+import org.rsmod.api.npc.interact.AiPlayerInteractions
+import org.rsmod.api.npc.opPlayer2
 import org.rsmod.api.player.events.interact.LocUnimplementedEvents
 import org.rsmod.api.player.events.interact.NpcUnimplementedEvents
 import org.rsmod.api.player.hit.queueHit
 import org.rsmod.api.player.protect.ProtectedAccess
 import org.rsmod.api.player.stat.thievingLvl
 import org.rsmod.api.repo.loc.LocRepository
+import org.rsmod.api.repo.npc.NpcRepository
 import org.rsmod.api.script.onEvent
 import org.rsmod.api.script.onProtectedEvent
 import org.rsmod.api.stats.xpmod.XpModifiers
@@ -24,6 +27,7 @@ import org.rsmod.game.type.obj.ObjTypeList
 import org.rsmod.game.type.obj.UnpackedObjType
 import org.rsmod.game.type.seq.SeqTypeList
 import org.rsmod.game.type.seq.UnpackedSeqType
+import org.rsmod.map.zone.ZoneKey
 import org.rsmod.plugin.scripts.PluginScript
 import org.rsmod.plugin.scripts.ScriptContext
 
@@ -32,7 +36,8 @@ import org.rsmod.plugin.scripts.ScriptContext
  *
  * Both bind the engine's unimplemented option slot, which runs only when no type or content script
  * already handles that NPC or loc. A name missing from the cache is skipped and counted instead of
- * failing boot. Guards and stall owners do not react to a theft.
+ * failing boot. A stall owner or guard within [ThievingExtras.WATCH_RANGE] tiles may notice a
+ * theft: the theft fails, the watcher shouts, and nearby guards attack.
  */
 class ThievingScript
 @Inject
@@ -42,6 +47,8 @@ constructor(
     private val objTypes: ObjTypeList,
     private val seqTypes: SeqTypeList,
     private val locRepo: LocRepository,
+    private val npcRepo: NpcRepository,
+    private val aiInteractions: AiPlayerInteractions,
     private val xpMods: XpModifiers,
 ) : PluginScript() {
     private val logger = InlineLogger()
@@ -247,12 +254,35 @@ constructor(
             mes("You can't steal from the market stall during combat!")
             return
         }
+        if (caught()) return
         val empty = emptyStall
         tableAnim?.let { anim(it) }
         delay(1)
         roll(stall.loot)
         statAdvance(stats.thieving, stall.xp * xpMods.get(player, stats.thieving))
         if (empty != null) locRepo.change(loc, empty, stall.respawnTicks)
+    }
+
+    /** Watchers in view may notice the theft; if so, guards attack and the theft fails. */
+    private fun ProtectedAccess.caught(): Boolean {
+        val range = ThievingExtras.WATCH_RANGE
+        val watchers =
+            npcRepo
+                .findAll(ZoneKey.from(coords), 1)
+                .filter { it.name.lowercase() in ThievingExtras.stallWatchers }
+                .filter {
+                    it.coords.level == coords.level && it.coords.chebyshevDistance(coords) <= range
+                }
+                .filter { lineOfSight(it.coords, coords) }
+                .toList()
+        if (watchers.isEmpty() || random.of(ThievingExtras.NOTICE_CHANCE) != 0) return false
+        val shouter = watchers.firstOrNull { it.name.lowercase() !in ThievingExtras.guards }
+        (shouter ?: watchers.first()).say("Hey! Get your hands off there!")
+        for (guard in watchers.filter { it.name.lowercase() in ThievingExtras.guards }) {
+            guard.opPlayer2(player, aiInteractions)
+        }
+        mes("You've been spotted stealing!")
+        return true
     }
 
     private fun ProtectedAccess.roll(loot: List<Loot>) {

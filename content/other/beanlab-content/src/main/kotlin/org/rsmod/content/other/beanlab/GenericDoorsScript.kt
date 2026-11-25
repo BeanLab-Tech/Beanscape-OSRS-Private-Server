@@ -45,6 +45,8 @@ class GenericDoorsScript @Inject constructor(private val locTypes: LocTypeList) 
     private fun org.rsmod.game.type.loc.UnpackedLocType.isDoorOrGate(): Boolean {
         val first = op.getOrNull(0) ?: return false
         if (!first.equals("Open", ignoreCase = true)) return false
+        // Locked doors (Thieving's "Pick-lock") must stay shut until picked.
+        if (op.any { it.equals("Pick-lock", ignoreCase = true) }) return false
         val lower = name.lowercase()
         if ("trapdoor" in lower || "trap door" in lower) return false
         return DOOR_NAME.containsMatchIn(lower)

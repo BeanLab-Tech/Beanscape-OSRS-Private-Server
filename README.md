@@ -49,6 +49,13 @@ fork) or RuneLite via RSProx, locked behind the tailnet.
 | Prayer, firemaking, cooking | `content/other/beanlab-skills/` | Bury/scatter, altars, light logs (fires + ashes), cook on fires/ranges |
 | Mining, smelting, smithing | `content/other/beanlab-smithing/` | 72 rock types, 41 furnaces, 17 anvils; menus for bars/items |
 | Eating & drinking | `content/other/beanlab-content/ConsumablesScript.kt` | Every Eat/Drink item: food heals, potions boost/restore, doses step down |
+| Crafting extras | `content/other/beanlab-crafting/Jewellery*.kt` | Gold/silver jewellery at furnaces, amulet/symbol stringing, cape dyeing |
+| Thieving extras | `content/other/beanlab-thieving/ThievingExtras*.kt` | Trapped chests, lock-picking doors; stall owners and guards react to thefts |
+| Agility | `content/other/beanlab-agility/` | Gnome Stronghold, Barbarian Outpost, Draynor rooftop (marks of grace) |
+| Slayer | `content/other/beanlab-slayer/` | Cache task tables, 9 masters, kill credit, points, enchanted gem, slayer shop |
+| Hunter | `content/other/beanlab-hunter/` | Bird snares, box traps (ferrets, chinchompas), butterfly/impling nets, impling jars |
+| Farming | `content/other/beanlab-farming/` | Allotments, herbs, flowers, hops; grows offline; V16 `beanlab_farming_patches` |
+| Construction | `content/other/beanlab-construction/` | Sawmill planks; starter house (garden, parlour, workshop) with build mode; V16 `beanlab_poh_furniture` |
 | Microbot client patcher + launcher | `client/microbot/` | Microbot 2.0.20 = RuneLite 1.11.19 = rev 233 |
 | Client webconfig | `webconfig/` (`osrs-webconfig`) | `jav_config.ws`, `world_list.ws`, RuneLite `worlds.js`, version file; served no-cache |
 
@@ -57,9 +64,11 @@ fork) or RuneLite via RSProx, locked behind the tailnet.
 RsMod upstream content is thin (upstream has Lumbridge, fishing, woodcutting, combat spells,
 special attacks, banks, some generic NPCs/objects; its cooking module is an empty placeholder). Still missing, roughly by impact:
 
-- **Skills:** crafting, fletching, herblore, agility,
-  thieving, runecrafting, slayer, hunter, farming, construction (fishing, woodcutting, mining,
-  smithing, prayer, firemaking and basic cooking exist; quests are only marked complete by `::questsdone`)
+- **Skills:** every skill has content now, but not all of it: no tree, fruit-tree, bush or special
+  patches, disease or watering (Farming); only three agility courses; no falconry, pitfalls or
+  salamanders (Hunter); a fixed three-room house without room building, guests or servants
+  (Construction); no slayer reward unlocks beyond cancelling a task. Quests are only marked complete
+  by `::questsdone`.
 - **Objects:** agility shortcuts, stiles, levers, most skilling objects, diagonal doors
 - **NPC content:** shops, most dialogue, boss mechanics (bosses spawn with stats only)
 - **Item effects:** poison/antipoison, special potions (divine, antifire, stamina's run-drain
@@ -443,6 +452,63 @@ change. Scripted boss mechanics are mostly not implemented upstream.
 - Data (levels, XP, success rates, respawn times, recipes) is in `SmithingData.kt`. Startup logs
   `[beanlab] mining/smithing registered` and lists `'Mine' locs not covered` (special rocks like gem
   rocks, essence, rubble, crashed stars need their own content).
+
+### Crafting extras & thieving extras
+
+- **Jewellery:** use a gold or silver bar on any furnace while holding a mould; the menu lists what
+  your moulds and gems can make (gold rings, necklaces, amulets and bracelets from plain gold to
+  zenyte; opal, jade and topaz silver jewellery; holy and unholy symbols, sickles, tiaras). Use a
+  ball of wool on an unstrung amulet or symbol to string it (4 XP). Use a dye on a cape to recolour it.
+- **Chests:** "Search for traps" on the 10-coin, nature rune, 50-coin, steel arrowtip, blood rune and
+  paladin chests (levels 13-72); "Open" sets the trap off. Empty chests refill after a while.
+- **Locked doors:** "Pick-lock" the Ardougne-era locked doors and gates (levels 1-82; the
+  `toollock` doors need a lockpick). These doors no longer open for free.
+- **Guards:** a stall owner or guard within 5 tiles with line of sight notices 1 in 3 thefts; the
+  theft fails, the watcher shouts, and guards attack.
+
+### Agility (`content/other/beanlab-agility`)
+
+Gnome Stronghold (level 1), Barbarian Outpost (35, through the entrance pipe) and the Draynor Village
+rooftop (10). Every obstacle gives its XP; doing the whole course in order pays the lap bonus, and a
+rooftop lap can drop a mark of grace. Obstacles never fail. Startup logs `[beanlab] agility registered`.
+
+### Slayer (`content/other/beanlab-slayer`)
+
+"Assignment" on Turael, Spria, Mazchna, Vannaka, Chaeldar, Konar, Nieve/Steve, Duradel/Kuradal or
+Krystilia. Tasks, weights and amounts come from the cache's own `slayer_master_task` table, filtered
+by your combat and Slayer levels (quest-locked and boss tasks are skipped). A kill counts when the
+npc's slayer category matches the task and pays Slayer XP. The task, count, points and completed
+total are the OSRS vars, so they survive relogs. "Rewards" cancels a task for 30 points; "Trade"
+opens the slayer equipment shop; the enchanted gem's "Check" shows the task. Kills are credited
+through the `NpcKilled` event the overlay adds to `api/death/.../NpcDeath.kt`.
+
+### Hunter (`content/other/beanlab-hunter`)
+
+- **Traps:** "Lay" a bird snare or box trap (1 trap, +1 at levels 20/40/60/80). A trap catches the
+  best creature of its kind within 6 tiles that you can catch: crimson swift to tropical wagtail
+  (snares), ferrets and grey/red/black chinchompas (box traps). "Check" the full trap for the catch
+  and your trap back; "Dismantle" an empty one. Traps that catch nothing collapse after 2 minutes.
+- **Nets:** "Catch" butterflies and implings with a butterfly net (held or wielded) and an empty
+  jar; "Loot" an impling jar.
+
+### Farming (`content/other/beanlab-farming`)
+
+Rake a patch (rake), add compost/supercompost/ultracompost, plant with a seed dibber (3 seeds for
+allotments, 4 for most hops, 1 for herbs and flowers), wait, then harvest (spade for allotments
+and hops; herbs and flowers are picked). 7 allotment crops, 15 herbs, 5 flowers, 7 hops at OSRS
+levels and XP. Allotments and hops grow one stage per 10 minutes, herbs 20, flowers 5, also while
+you're logged out. Patches show their real growth stages. State is stored per character in
+`beanlab_farming_patches` (V16).
+
+### Construction (`content/other/beanlab-construction`)
+
+- **Sawmill:** "Buy-plank" on the sawmill operator turns every log of one kind into planks (100 /
+  250 / 500 / 1,500 gp each for plank / oak / teak / mahogany).
+- **House:** "Enter", "Home" or "Build mode" on any house portal opens your house: a garden with the
+  exit portal, a parlour (east) and a workshop (north). In build mode, "Build" on a hotspot lists the
+  furniture for it with the level and materials (hammer and saw needed); "Remove" takes it away.
+  Furniture is saved in `beanlab_poh_furniture` (V16). Logging out inside the house puts you outside
+  the Rimmington portal next time.
 
 ## In-Game Commands
 

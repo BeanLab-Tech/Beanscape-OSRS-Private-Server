@@ -4,6 +4,10 @@ Bug fixes for the Beanscape server, launcher, and admin plugin. Add new entries 
 
 ## 2026-11-25
 
+### Agility, Slayer, Hunter, Farming and Construction had no content; crafting and thieving extras
+
+The last five skills answered "Nothing interesting happens." Each now has its own module. Agility: the Gnome Stronghold, Barbarian Outpost and Draynor rooftop courses, with lap bonuses and marks of grace. Slayer: all nine masters assign tasks from the cache's own task tables, kills count by the npc's slayer category, and points, the enchanted gem and a slayer shop work. Hunter: bird snares, box traps (ferrets and chinchompas), butterfly and impling nets, and impling jars. Farming: allotments, herbs, flowers and hops grow in real patches, also while logged out. Construction: sawmill planks and a starter house (garden, parlour, workshop) with build mode and furniture. Crafting now makes gold and silver jewellery, strings amulets and dyes capes; Thieving adds trapped chests, lock-picking doors, and stall owners and guards who notice thefts. Locked doors no longer open for free. Needs a server restart with the V16 migration. Relog after it comes back.
+
 ### Launcher and plugins now live in the GitHub repo
 
 The launcher (`client/launcher`), the Admin plugin (`client/microbot/admin-plugin`) and the Companion plugin (`client/microbot/companion-plugin`) are now committed to `main` of the server repo, alongside the server content modules from the entries below. `CHANGELOG.md` sits at the repo root and the Updates tab finds it there or in the old workspace layout. The client files keep the pinned Microbot 2.0.20; main's Microbot 2.6.65 update was not taken because it cannot finish the JS5 handshake on revision 233. Run `git pull` in the repo to stay current.

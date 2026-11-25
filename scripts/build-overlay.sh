@@ -34,7 +34,15 @@ if [[ $# -eq 0 ]]; then
         :content:other:grandexchange:test \
         :content:other:grandexchange:spotlessCheck \
         :content:other:commands:compileKotlin \
-        :content:other:commands:spotlessCheck
+        :content:other:commands:spotlessCheck \
+        :content:other:beanlab-slayer:test \
+        :content:other:beanlab-farming:test \
+        :content:other:beanlab-agility:spotlessCheck \
+        :content:other:beanlab-construction:spotlessCheck \
+        :content:other:beanlab-farming:spotlessCheck \
+        :content:other:beanlab-hunter:spotlessCheck \
+        :content:other:beanlab-slayer:spotlessCheck \
+        :api:death:spotlessCheck
 fi
 cd "$WORK"
 exec ./gradlew "$@"
