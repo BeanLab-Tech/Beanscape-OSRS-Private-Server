@@ -77,3 +77,19 @@ All coordinates are arena-local tiles, `0 until size` in x and z, z grows north.
 size, unknown floor names, rects outside the area or with the wrong corner order, door ranges,
 overlapping rooms, unknown shapes and angles, and NPCs or the arrival tile standing on a wall.
 Editors should show these messages as they are.
+
+## In-game editing (`::hub`, admin only)
+
+`HubCommands.kt` edits the hub live. Stand on the tile and use `::hub npc <name>`,
+`::hub loc <name> [shape] [angle]`, `::hub wall <name> <north|south|east|west> [length]`,
+`::hub rm`, `::hub undo`, `::hub save`; `::hub tp` / `::hub where` move and locate you, `::hub help`
+lists everything. Changes show to everyone at once and are held in a working copy of the layout
+(`HubEditor`). `::hub save` validates it (problems are printed in chat), then writes the override
+file atomically and keeps the previous one as `hub-layout.json.bak`. A restart loads the saved file.
+
+- A wall faces the way you name; north/south walls run east from your tile, east/west walls run north.
+- NPCs and objects are refused on wall tiles (wall decor such as noticeboards may share one), the
+  leave portal and outside the hub. `::hub rm` takes the first thing on your tile, then the
+  neighbours. Room outline walls cannot be removed one piece at a time: change the room in the file.
+- `::hub undo` is one shared stack (the last change by anyone), 100 deep, lost on restart.
+- Floors are not editable in game; they need `generateHubTerrain` and a cache repack.

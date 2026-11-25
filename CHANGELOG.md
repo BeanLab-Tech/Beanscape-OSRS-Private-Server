@@ -4,6 +4,10 @@ Bug fixes for the Beanscape server, launcher, and admin plugin. Add new entries 
 
 ## 2026-11-25
 
+### `::hub` commands edit the Market Hub in game
+
+Admins can now place and remove hub NPCs, objects and wall runs with `::hub npc`, `::hub loc`, `::hub wall` and `::hub rm`, undo with `::hub undo`, and write the layout with `::hub save` (validated first, atomic, previous file kept as `.bak`). Changes show to everyone immediately; a restart loads the saved file. `::hub tp`, `::hub where` and `::hub help` round it out. Floors still need a repack. See `docs/HUB_LAYOUT.md`.
+
 ### Launcher: Staging server switch
 
 Settings has a new Server choice: Live (unchanged) or Staging, the OpenRune revision 242 test world on the same VM. Staging downloads and patches its own client (Microbot 2.6.57) on first Play and keeps its own client files under `servers\staging` in the data folder, so the live client is not touched. Accounts are shared. Staging connects on port 40002 (its jav_config sets the client's build parameter, so the client uses 40000 + world 2 instead of 43594). Only accounts that exist on staging and are on its whitelist can log in.
