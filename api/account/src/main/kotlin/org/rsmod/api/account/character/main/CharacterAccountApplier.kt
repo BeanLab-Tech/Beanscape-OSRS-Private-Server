@@ -33,6 +33,11 @@ constructor(private val modLevelTypes: ModLevelTypeList) :
         player.username = data.loginName
         player.displayName = data.displayName ?: ""
         player.coords = CoordGrid(data.coordX, data.coordZ, data.coordLevel)
+        // BeanLab: a player saved inside an instance (e.g. a player-owned house) would log in to a
+        // region that no longer exists. Put them outside the Rimmington house portal instead.
+        if (data.coordX >= INSTANCE_AREA_START_X) {
+            player.coords = INSTANCE_LOGOUT_COORDS
+        }
         player.runEnergy = data.runEnergy
         player.xpRate = data.xpRate
         player.lastLogin = LocalDateTime.now()
@@ -58,6 +63,12 @@ constructor(private val modLevelTypes: ModLevelTypeList) :
 
 /** Varp 1780 `account_credit`: membership days remaining, shown in the account tab. */
 private const val ACCOUNT_CREDIT_VARP = 1780
+
+/** Instances (RsMod `RegionRegistry` working area) start at this x; the map ends near 4100. */
+private const val INSTANCE_AREA_START_X = 6400
+
+/** Outside the Rimmington house portal. */
+private val INSTANCE_LOGOUT_COORDS = CoordGrid(2953, 3224, 0)
 
 /** Reported membership length for every account (10 years). */
 private const val MEMBERSHIP_DAYS = 3650

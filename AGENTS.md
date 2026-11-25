@@ -19,7 +19,11 @@ api/db/src/main/resources/db/migration/
   V11__beanlab_members_for_all.sql   every account members
   V12__admin_api.sql                 admin_tokens + admin_audit (admin console API)
   V15__discord_avatar.sql            accounts.discord_avatar (profile picture in the admin console)
-api/account/.../CharacterAccountApplier.kt   forces player.members = true at login
+  V16__beanlab_farming_and_poh.sql   beanlab_farming_patches + beanlab_poh_furniture
+api/account/.../CharacterAccountApplier.kt   forces player.members = true at login; moves players
+                                     saved inside an instance (x >= 6400) to the Rimmington portal
+api/death/.../NpcDeath.kt            upstream file + publishes NpcKilled(npc, hero) on every npc
+                                     death (slayer kill credit; pets/drop tables can use it too)
 api/config/.../BaseObjs.kt           adds objs.rotten_potato
 content/other/admin-potato/          rotten potato menu, ::teleports/::tp (TeleportCatalog/Menu),
                                      ::questsdone (QuestCommands + generated QuestProgressVars)
@@ -28,8 +32,18 @@ content/other/admin-api/             loopback HTTP API for the in-client admin c
                                      thread via GameAccess), ::admintoken (owner), tests
 content/other/beanlab-smithing/      mining, smelting, smithing (data in SmithingData.kt)
 content/other/beanlab-skills/        prayer, firemaking, cooking (data in SkillsData.kt)
-content/other/beanlab-content/       generic door/gate pass-through (unimplemented-op slot),
-                                     eating/drinking (registered on GameLifecycle.Startup)
+content/other/beanlab-content/       generic door/gate pass-through (unimplemented-op slot; skips
+                                     Pick-lock doors), eating/drinking, shops (shops.txt)
+content/other/beanlab-{crafting,thieving,fletching,herblore,runecraft,fishing,magic}/
+                                     skill modules; crafting has Jewellery*, thieving ThievingExtras*
+content/other/beanlab-agility/       Gnome, Barbarian, Draynor rooftop (fixed tiles, AgilityData.kt)
+content/other/beanlab-slayer/        tasks from cache dbtables slayer_task/slayer_master_task, OSRS
+                                     slayer vars, NpcKilled credit; SlayerTasks is unit-tested
+content/other/beanlab-hunter/        snares/box traps (in-memory, StartCycle), nets, impling jars
+content/other/beanlab-farming/       patches via region farming_transmit varbits, growth stages
+                                     parsed from multiloc names, DB per character (V16), tests
+content/other/beanlab-construction/  sawmill + instanced starter house (RegionTemplate copy of the
+                                     Rimmington garden/parlour/workshop templates), DB (V16)
 content/other/grandexchange/         GE engine (GeBook), ::ge commands (GeCommands), tests
 content/other/commands/.../NameChangeCommands.kt   ::name
 web/                                 Discord registration + admin panel (FastAPI)

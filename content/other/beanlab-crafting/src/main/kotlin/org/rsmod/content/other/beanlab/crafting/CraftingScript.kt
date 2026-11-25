@@ -26,7 +26,8 @@ import org.rsmod.plugin.scripts.ScriptContext
  * clay, pottery, and the spinning wheel.
  *
  * Items resolve by internal name, then by display name. A recipe whose item is missing is skipped
- * and counted instead of failing boot. Jewellery and cape dyeing are not included.
+ * and counted instead of failing boot. Jewellery, stringing and cape dyeing live in
+ * [JewelleryScript].
  */
 class CraftingScript
 @Inject

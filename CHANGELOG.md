@@ -4,6 +4,10 @@ Bug fixes for the Beanscape server, launcher, and admin plugin. Add new entries 
 
 ## 2026-11-25
 
+### Agility, Slayer, Hunter, Farming and Construction had no content; crafting and thieving extras
+
+The last five skills answered "Nothing interesting happens." Each now has its own module. Agility: the Gnome Stronghold, Barbarian Outpost and Draynor rooftop courses, with lap bonuses and marks of grace. Slayer: all nine masters assign tasks from the cache's own task tables, kills count by the npc's slayer category, and points, the enchanted gem and a slayer shop work. Hunter: bird snares, box traps (ferrets and chinchompas), butterfly and impling nets, and impling jars. Farming: allotments, herbs, flowers and hops grow in real patches, also while logged out. Construction: sawmill planks and a starter house (garden, parlour, workshop) with build mode and furniture. Crafting now makes gold and silver jewellery, strings amulets and dyes capes; Thieving adds trapped chests, lock-picking doors, and stall owners and guards who notice thefts. Locked doors no longer open for free. Needs a server restart with the V16 migration. Relog after it comes back.
+
 ### Admin console showed offline after a restart
 
 The in-client admin API was switched off by the `ADMIN_API_ENABLED=false` systemd drop-in, which only took effect when the server restarted after the Reboot action. The drop-in in `deploy/systemd/osrs-server.service.d/admin-api.conf` is now `true`, so the console comes back online with the next deploy. It still listens on 127.0.0.1:8087 only.
