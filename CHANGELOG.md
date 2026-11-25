@@ -4,6 +4,10 @@ Bug fixes for the Beanscape server, launcher, and admin plugin. Add new entries 
 
 ## 2026-11-25
 
+### The world map did nothing
+
+Clicking the globe next to the minimap did nothing, because RsMod has no world map handler. It now opens the full world map in the map slot of every layout, and clicking the globe again, the map's close button or Escape closes it. While the map is open your position marker follows you. The fullscreen option opens the same floating map. Needs a server restart. Relog after it comes back.
+
 ### Market Hub is now a layout file
 
 The hub is described by `hub-layout.json` (floors, rooms with walls and doors, objects, NPCs, arrival and leave-portal tiles) instead of code. It is validated on load with every problem listed, a bad override at `.data/hub-layout.json` is ignored with a warning, and objects, NPCs and walls can change with only a restart. Floors still need `generateHubTerrain` and a cache repack. The converted layout reproduces the previous terrain byte for byte. Format and workflow: `docs/HUB_LAYOUT.md`. This is the base for the planned web editor, in-game commands and client plugin tab.

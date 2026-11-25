@@ -44,6 +44,8 @@ content/other/beanlab-farming/       patches via region farming_transmit varbits
                                      parsed from multiloc names, DB per character (V16), tests
 content/other/beanlab-construction/  sawmill + instanced starter house (RegionTemplate copy of the
                                      Rimmington garden/parlour/workshop templates), DB (V16)
+content/other/beanlab-worldmap/      minimap globe -> worldmap (595) in map_container; sends
+                                     worldmap_transmitdata (1749) on movement while open
 content/other/grandexchange/         GE engine (GeBook), ::ge commands (GeCommands), tests
 content/other/commands/.../NameChangeCommands.kt   ::name
 web/                                 Discord registration + admin panel (FastAPI)
