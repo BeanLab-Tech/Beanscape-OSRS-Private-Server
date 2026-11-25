@@ -56,6 +56,7 @@ fork) or RuneLite via RSProx, locked behind the tailnet.
 | Hunter | `content/other/beanlab-hunter/` | Bird snares, box traps (ferrets, chinchompas), butterfly/impling nets, impling jars |
 | Farming | `content/other/beanlab-farming/` | Allotments, herbs, flowers, hops; grows offline; V16 `beanlab_farming_patches` |
 | Construction | `content/other/beanlab-construction/` | Sawmill planks; starter house (garden, parlour, workshop) with build mode; V16 `beanlab_poh_furniture` |
+| World map | `content/other/beanlab-worldmap/` | Minimap globe opens the world map; your marker follows you while it's open |
 | Microbot client patcher + launcher | `client/microbot/` | Microbot 2.0.20 = RuneLite 1.11.19 = rev 233 |
 | Client webconfig | `webconfig/` (`osrs-webconfig`) | `jav_config.ws`, `world_list.ws`, RuneLite `worlds.js`, version file; served no-cache |
 
