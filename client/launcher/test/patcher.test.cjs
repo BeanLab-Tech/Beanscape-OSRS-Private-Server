@@ -8,7 +8,10 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const AdmZip = require('adm-zip');
 const { rewriteUtf8Constants, patchJar, JAGEX_MODULUS } = require('../electron/patcher.cjs');
-const cfg = require('../electron/server-config.cjs');
+const serverConfig = require('../electron/server-config.cjs');
+const settings = require('../electron/settings.cjs');
+
+const cfg = serverConfig.forServer('live');
 const { parseJavaMajor } = require('../electron/java.cjs');
 
 function utf8(s) {
@@ -51,9 +54,41 @@ test('throws when the constant is missing', () => {
   assert.throws(() => rewriteUtf8Constants(fakeClass(['a']), new Map([['nope', 'x']])), /not found exactly once/);
 });
 
-test('server modulus has the same shape as the Jagex one', () => {
-  assert.strictEqual(cfg.modulus.length, JAGEX_MODULUS.length);
-  assert.match(cfg.modulus, /^[0-9a-f]+$/);
+test('every server modulus has the same shape as the Jagex one it replaces', () => {
+  for (const id of Object.keys(serverConfig.SERVERS)) {
+    const c = serverConfig.forServer(id);
+    assert.strictEqual(c.modulus.length, JAGEX_MODULUS.length, id);
+    assert.match(c.modulus, /^[0-9a-f]+$/, id);
+    assert.strictEqual(c.patch.jagexModulus.length, JAGEX_MODULUS.length, id);
+    assert.match(c.microbot.sha256, /^[0-9a-f]{64}$/, id);
+  }
+  assert.strictEqual(serverConfig.forServer('live').patch.jagexModulus, JAGEX_MODULUS);
+});
+
+test('servers keep separate builds and ports; unknown ids fall back to live', () => {
+  const live = serverConfig.forServer('live');
+  const staging = serverConfig.forServer('staging');
+  assert.notStrictEqual(live.microbot.version, staging.microbot.version);
+  assert.notStrictEqual(live.gamePort, staging.gamePort);
+  assert.strictEqual(serverConfig.forServer('nope').id, 'live');
+  assert.strictEqual(settings.normalize({ server: 'staging' }).server, 'staging');
+  assert.strictEqual(settings.normalize({ server: 'evil' }).server, 'live');
+});
+
+test('patchJar uses the per-server class names', () => {
+  const staging = serverConfig.forServer('staging');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bsc-'));
+  const src = path.join(dir, 'in.jar');
+  const dst = path.join(dir, 'out.jar');
+  const zip = new AdmZip();
+  zip.addFile(staging.patch.modulusClass, fakeClass([staging.patch.jagexModulus, 'x']));
+  zip.addFile(staging.patch.allowlistClass, fakeClass(['127.0.0.1', 'y']));
+  zip.writeZip(src);
+  const sha = crypto.createHash('sha256').update(fs.readFileSync(src)).digest('hex');
+  patchJar(src, dst, staging.modulus, sha, staging.patch);
+  const out = new AdmZip(dst);
+  assert.ok(out.getEntry(staging.patch.modulusClass).getData().includes(staging.modulus));
+  assert.ok(!out.getEntry(staging.patch.allowlistClass).getData().includes('127.0.0.1'));
 });
 
 test('patchJar swaps both constants and refuses a wrong checksum', () => {

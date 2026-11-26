@@ -1,9 +1,10 @@
 'use strict';
 
 // Node port of BeanLab's client/microbot/patch-microbot.py.
-// Exactly two constants change inside Microbot 2.0.20:
-//   bc.class  Jagex's RSA login modulus -> the BeanLab server's modulus
-//   bl.class  host allowlist entry "127.0.0.1" -> ""  (endsWith("") accepts any host)
+// Exactly two constants change inside the pinned Microbot jar (class names come from
+// server-config.cjs `patch`, because they change every revision):
+//   modulusClass    Jagex's RSA login modulus -> the server's modulus
+//   allowlistClass  host allowlist entry "127.0.0.1" -> ""  (endsWith("") accepts any host)
 // Every other jar entry is copied byte for byte.
 
 const crypto = require('node:crypto');
@@ -64,16 +65,19 @@ function validModulus(modulus) {
   return typeof modulus === 'string' && modulus.length === JAGEX_MODULUS.length && /^[0-9a-f]+$/.test(modulus);
 }
 
+// Microbot 2.0.20 (rev 233); other builds pass their own `targets`.
+const DEFAULT_TARGETS = { modulusClass: 'bc.class', allowlistClass: 'bl.class', jagexModulus: JAGEX_MODULUS };
+
 /** Patches `src` into `dst`. Refuses any jar that is not the expected Microbot build. */
-function patchJar(src, dst, modulus, expectedSha256) {
+function patchJar(src, dst, modulus, expectedSha256, targets = DEFAULT_TARGETS) {
   modulus = String(modulus).trim().toLowerCase();
   if (!validModulus(modulus)) throw new Error(`modulus must be ${JAGEX_MODULUS.length} hex chars (1024-bit key)`);
   const digest = sha256File(src);
   if (digest !== expectedSha256) throw new Error(`${src} is not the expected Microbot jar (sha256 ${digest}); refusing to patch`);
 
   const patches = {
-    'bc.class': new Map([[JAGEX_MODULUS, modulus]]),
-    'bl.class': new Map([['127.0.0.1', '']]),
+    [targets.modulusClass]: new Map([[targets.jagexModulus, modulus]]),
+    [targets.allowlistClass]: new Map([['127.0.0.1', '']]),
   };
   const zin = new AdmZip(src);
   const zout = new AdmZip();

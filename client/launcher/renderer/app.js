@@ -7,7 +7,8 @@ let working = false;
 let accountState = { activeId: null, accounts: [] };
 let runtime = null;
 let health = null;
-let settingsState = { theme: 'gold', background: 'stone', memoryMb: 2048 };
+let settingsState = { theme: 'gold', background: 'stone', memoryMb: 2048, server: 'live' };
+const SERVER_LABELS = { live: 'Live', staging: 'Staging' };
 let currentView = 'home';
 let metric = 'xp';
 let range = '30d';
@@ -417,6 +418,25 @@ function applySettings() {
   const memory = $('memory');
   memory.value = String(settingsState.memoryMb);
   $('memory-label').textContent = `${settingsState.memoryMb} MB`;
+  const server = settingsState.server || 'live';
+  $('server-label').textContent = SERVER_LABELS[server] || server;
+  for (const b of document.querySelectorAll('[data-server]')) {
+    const on = b.dataset.server === server;
+    b.setAttribute('aria-pressed', String(on));
+    b.classList.toggle('gold', on);
+    b.classList.toggle('ghost', !on);
+  }
+}
+
+for (const b of document.querySelectorAll('[data-server]')) {
+  b.addEventListener('click', async () => {
+    if (b.dataset.server === settingsState.server) return;
+    settingsState = await api.saveSettings({ server: b.dataset.server });
+    applySettings();
+    addLog(`Server: ${SERVER_LABELS[settingsState.server]}. Applies to clients you start next.`);
+    await refresh();
+    refreshAdmin();
+  });
 }
 
 buildSwatches('theme-swatches', THEMES, 'theme');
@@ -448,6 +468,7 @@ function paintRuntime() {
   $('java').hidden = Boolean(runtime.java);
   $('java-value').textContent = javaText;
   $('client-value').textContent = clientText;
+  $('client-hint').textContent = `Microbot ${runtime.microbotVersion}, patched for ${runtime.serverName}. Rebuild after a modulus change.`;
   $('status-server').textContent = runtime.server ? 'Server up' : 'Server down';
   $('status-microbot').textContent = `Microbot ${runtime.microbotVersion}`;
 }

@@ -4,6 +4,10 @@ Bug fixes for the Beanscape server, launcher, and admin plugin. Add new entries 
 
 ## 2026-11-25
 
+### Launcher: Staging server switch
+
+Settings has a new Server choice: Live (unchanged) or Staging, the OpenRune revision 242 test world on the same VM. Staging downloads and patches its own client (Microbot 2.6.57) on first Play and keeps its own client files under `servers\staging` in the data folder, so the live client is not touched. Accounts are shared. Staging connects on port 40002 (its jav_config sets the client's build parameter, so the client uses 40000 + world 2 instead of 43594). Only accounts that exist on staging and are on its whitelist can log in.
+
 ### The world map did nothing
 
 Clicking the globe next to the minimap did nothing, because RsMod has no world map handler. It now opens the full world map in the map slot of every layout, and clicking the globe again, the map's close button or Escape closes it. While the map is open your position marker follows you. The fullscreen option opens the same floating map. Needs a server restart. Relog after it comes back.

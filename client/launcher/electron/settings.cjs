@@ -6,7 +6,8 @@ const path = require('node:path');
 // Ids only: the renderer owns the colors, so a bad file can never inject CSS.
 const THEMES = ['gold', 'emerald', 'crimson', 'azure', 'amethyst', 'ember', 'bone'];
 const BACKGROUNDS = ['stone', 'ink', 'midnight', 'forest', 'plum', 'slate'];
-const DEFAULTS = { theme: 'gold', background: 'stone', memoryMb: 2048 };
+const SERVER_IDS = Object.keys(require('./server-config.cjs').SERVERS);
+const DEFAULTS = { theme: 'gold', background: 'stone', memoryMb: 2048, server: 'live' };
 const MEMORY = { min: 1024, max: 4096, step: 128 };
 
 function file(dataDir) {
@@ -24,6 +25,7 @@ function normalize(raw, base = DEFAULTS) {
     theme: THEMES.includes(raw?.theme) ? raw.theme : base.theme,
     background: BACKGROUNDS.includes(raw?.background) ? raw.background : base.background,
     memoryMb: clampMemory(raw?.memoryMb ?? base.memoryMb, base.memoryMb),
+    server: SERVER_IDS.includes(raw?.server) ? raw.server : base.server,
   };
 }
 
@@ -42,4 +44,4 @@ function save(dataDir, patch) {
   return next;
 }
 
-module.exports = { read, save, normalize, THEMES, BACKGROUNDS, DEFAULTS, MEMORY };
+module.exports = { read, save, normalize, THEMES, BACKGROUNDS, DEFAULTS, MEMORY, SERVER_IDS };

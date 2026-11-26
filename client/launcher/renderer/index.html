@@ -165,13 +165,21 @@
               <pre class="runlog" id="log" aria-live="polite"></pre>
             </section>
             <section class="panel setup-block">
+              <div class="setup-row"><h3>Server</h3><p class="value" id="server-label">Live</p></div>
+              <p class="hint">Staging is the OpenRune test world (revision 242). It uses its own client build, downloaded on first Play.</p>
+              <div class="row" role="group" aria-label="Server">
+                <button class="btn sm" id="server-live" type="button" data-server="live" aria-pressed="true">Live</button>
+                <button class="btn sm ghost" id="server-staging" type="button" data-server="staging" aria-pressed="false">Staging</button>
+              </div>
+            </section>
+            <section class="panel setup-block">
               <div class="setup-row"><h3>Java</h3><p class="value" id="java-value">Checking</p></div>
               <p class="hint">Needs 17 or newer. Install uses winget for Temurin 21.</p>
               <button class="btn sm" id="java" type="button" hidden>Install Java</button>
             </section>
             <section class="panel setup-block">
               <div class="setup-row"><h3>Client</h3><p class="value" id="client-value">Checking</p></div>
-              <p class="hint">Microbot 2.0.20, patched for this server. Rebuild after a modulus change.</p>
+              <p class="hint" id="client-hint">Microbot, patched for this server. Rebuild after a modulus change.</p>
               <div class="row">
                 <button class="btn sm" id="rebuild" type="button">Rebuild client</button>
                 <button class="btn sm ghost" id="data" type="button">Open data folder</button>

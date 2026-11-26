@@ -49,7 +49,7 @@ async function prepare(dataDir, cfg, log, onProgress) {
     }
   }
   log('Verified Microbot jar, patching for the BeanLab server');
-  patchJar(p.original, p.patched, cfg.modulus, cfg.microbot.sha256);
+  patchJar(p.original, p.patched, cfg.modulus, cfg.microbot.sha256, cfg.patch);
   fs.writeFileSync(p.stamp, JSON.stringify({ modulus: modulusId(cfg), sha256: cfg.microbot.sha256 }));
   log('Client ready');
 }
@@ -61,7 +61,7 @@ function launch(dataDir, cfg, javaw, extraArgs = [], heapMb = cfg.heapMb) {
   const args = [
     `-Xmx${heapMb}m`,
     `-Duser.home=${p.home}`,
-    `-Drunelite.http-service.url=${cfg.httpServiceUrl}`,
+    ...(cfg.httpServiceUrl ? [`-Drunelite.http-service.url=${cfg.httpServiceUrl}`] : []),
     '-jar',
     p.patched,
     `--jav_config=${cfg.javConfigUrl}`,
