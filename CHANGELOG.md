@@ -4,6 +4,10 @@ Bug fixes for the Beanscape server, launcher, and admin plugin. Add new entries 
 
 ## 2026-11-25
 
+### Staging froze the moment you entered the world
+
+On staging (RuneLite 1.13.6) the game froze on the first tick after login. The Beanscape Companion plugin was built against live's RuneLite 1.11.19, where `ItemManager.getItemPrice` returns `int`; on 1.13.6 it returns `long`, so the plugin threw `NoSuchMethodError` on the client thread and stopped the game loop. Companion 1.0.1 looks the method up at runtime and works on both clients, and a failed export is now logged instead of reaching the client thread. Pull and press Play: the launcher replaces the installed plugin. Live was not affected.
+
 ### Market Hub portal was gone from the Grand Exchange
 
 The purple Soul Wars portal to the Market Hub no longer showed on the Grand Exchange plaza. The entrance is now a copy of the clan hall portal, standing where the plaza bench was (3182, 3468; the bench is removed). Enter it to reach the hub; the purple portal inside the hub still brings you back to the Exchange. Needs a server restart, no cache repack.
