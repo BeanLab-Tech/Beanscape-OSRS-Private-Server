@@ -39,3 +39,31 @@ bot) — the service fails fast if the DB or hasher is wrong.
 ## Phase 2 (not yet)
 `/admin` on the same service (Discord-OAuth admin role or local token):
 realm switching, account/character browser, item grants, bans, service status.
+
+## Market Hub map editor (admin panel)
+
+`/admin/hub` in the admin panel (`admin_app.py`, port 8086) edits the Market Hub layout file
+described in `docs/HUB_LAYOUT.md`. Same sign-in as the rest of the panel (config admin or an owner
+listed in `panel_users`).
+
+- Reads the override `<hub_server_dir>/.data/hub-layout.json` if present, else the bundled
+  `<hub_server_dir>/content/other/beanlab-soulwars/src/main/resources/.../hub-layout.json`.
+  Set `"hub_server_dir"` (default `/opt/osrs/server/rsmod`) in `admin_config.json`; an explicit
+  override path can be given as `"hub_layout_file"` or the `HUB_LAYOUT_FILE` env var.
+- Save validates (a Python port of `HubMap.parse` in `hub_layout.py`, same messages), then writes
+  the override atomically (temp file + rename) and keeps one timestamped backup
+  (`hub-layout.json.bak-YYYYMMDD-HHMMSS`). It never restarts the server: restart `osrs-server`
+  afterwards, and for floor changes also regenerate terrain and repack the cache (the page shows
+  which one an edit needs).
+- API (all need the panel session cookie, 401 otherwise): `GET /admin/api/hub/layout`,
+  `PUT /admin/api/hub/layout` (`{"layout": {...}, "base_etag": "..."}`; 422 with
+  `{"problems": [...]}` when invalid, 409 if the file changed since loaded),
+  `POST /admin/api/hub/validate`, `GET /admin/api/hub/underlays`.
+- `hub_layout.py` must be deployed next to `admin_app.py`. No new dependencies.
+- Floor colours: `static/underlay_colors.json` (ids and rgb of cache underlays). Regenerate it from
+  the VM probe output with `python tools/import_underlay_probe.py probe.out > static/underlay_colors.json`.
+  Ids missing from the file draw in a placeholder colour.
+
+Tests: `pip install pytest httpx` then `python -m pytest web/tests` (the validator is also checked
+against `content/other/beanlab-soulwars/src/test/resources/hub-layout-vectors.json`, written so a
+Kotlin test can read the same cases).
