@@ -22,12 +22,12 @@ import org.rsmod.routefinder.collision.CollisionFlagMap
 import org.rsmod.routefinder.flag.CollisionFlag
 
 /**
- * A purple Soul Wars portal at the Grand Exchange that leads to the Market Hub.
+ * A copy of the clan hall portal at the Grand Exchange that leads to the Market Hub.
  *
- * In the cache the Soul Wars portal is the loc `soul_wars_edgeville_portal` (the one that sits in
- * Edgeville in the real game). RsMod ships no Soul Wars content, so nothing places or handles it:
- * the portal is spawned here on [GameLifecycle.Startup] and its "Enter" option teleports to the
- * hub's arrival tile. A `soul_wars_leave_soulwars_portal` in the hub returns to the Exchange.
+ * The entrance is the cache loc `clan_hub_portal` (the clan hall portal). RsMod ships no clan hall
+ * content, so nothing else handles it. It is spawned on [GameLifecycle.Startup] in place of the
+ * plaza bench (`bench2`, loc 5615) at [EXCHANGE_PORTAL], and its options teleport to the hub's
+ * arrival tile. A purple `soul_wars_leave_soulwars_portal` in the hub returns to the Exchange.
  *
  * The hub is a [HubMap] (`hub-layout.json`, or an override file, see [HubMapLoader]) of up to 128 x
  * 128 tiles at [ARENA_MIN], outside every real map square. Its floors are packed into the cache by
@@ -64,7 +64,7 @@ constructor(
         onEvent<GameLifecycle.Startup> {
             buildArena(map.size)
             val shape = LocShape.CentrepieceStraight
-            locRepo.add(EXCHANGE_PORTAL, enter, Int.MAX_VALUE, LocAngle.South, shape)
+            placeExchangePortal(enter)
             val exit = local(map.leavePortal.x, map.leavePortal.z)
             locRepo.add(exit, leave, Int.MAX_VALUE, LocAngle.South, shape)
             val placed = buildLocs(map)
@@ -74,6 +74,24 @@ constructor(
                     "(layout: ${loaded.source}, $placed objects, $npcs npcs)"
             }
         }
+    }
+
+    /**
+     * Removes the plaza bench and puts the portal on its tile, facing the way the bench faced. If
+     * the bench is not there (a different cache), the portal is placed facing south anyway.
+     */
+    private fun placeExchangePortal(enter: LocType) {
+        val bench = locTypes.values.firstOrNull { it.internalName == EXCHANGE_BENCH }
+        val seat = bench?.let { locRepo.findExact(EXCHANGE_PORTAL, it) }
+        if (seat != null) {
+            locRepo.del(seat, Int.MAX_VALUE)
+        } else {
+            logger.warn {
+                "[soulwars] no $EXCHANGE_BENCH at $EXCHANGE_PORTAL; portal placed anyway"
+            }
+        }
+        val angle = seat?.angle ?: LocAngle.South
+        locRepo.add(EXCHANGE_PORTAL, enter, Int.MAX_VALUE, angle, LocShape.CentrepieceStraight)
     }
 
     /** Allocates the zones covering the arena and blocks every tile outside it. */
@@ -136,7 +154,8 @@ constructor(
     private fun local(x: Int, z: Int) = CoordGrid(ARENA_MIN.x + x, ARENA_MIN.z + z, ARENA_MIN.level)
 
     private companion object {
-        const val ENTER_PORTAL = "soul_wars_edgeville_portal"
+        const val ENTER_PORTAL = "clan_hub_portal"
+        const val EXCHANGE_BENCH = "bench2"
         const val LEAVE_PORTAL = "soul_wars_leave_soulwars_portal"
         const val ZONE = 8
 
@@ -146,8 +165,10 @@ constructor(
          */
         val ARENA_MIN = CoordGrid(5120, 3072, 0)
 
-        /** Grand Exchange plaza (the ::tp "Grand Exchange" entry is 3164, 3486). */
-        val EXCHANGE_PORTAL = CoordGrid(3172, 3489, 0)
+        /** The plaza bench (loc 5615) the portal replaces. */
+        val EXCHANGE_PORTAL = CoordGrid(3182, 3468, 0)
+
+        /** Where the leave portal puts you (the ::tp "Grand Exchange" entry). */
         val EXCHANGE_EXIT = CoordGrid(3164, 3486, 0)
     }
 }

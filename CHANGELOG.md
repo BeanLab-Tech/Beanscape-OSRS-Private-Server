@@ -8,6 +8,10 @@ Bug fixes for the Beanscape server, launcher, and admin plugin. Add new entries 
 
 On staging (RuneLite 1.13.6) the game froze on the first tick after login. The Beanscape Companion plugin was built against live's RuneLite 1.11.19, where `ItemManager.getItemPrice` returns `int`; on 1.13.6 it returns `long`, so the plugin threw `NoSuchMethodError` on the client thread and stopped the game loop. Companion 1.0.1 looks the method up at runtime and works on both clients, and a failed export is now logged instead of reaching the client thread. Pull and press Play: the launcher replaces the installed plugin. Live was not affected.
 
+### Market Hub portal was gone from the Grand Exchange
+
+The purple Soul Wars portal to the Market Hub no longer showed on the Grand Exchange plaza. The entrance is now a copy of the clan hall portal, standing where the plaza bench was (3182, 3468; the bench is removed). Enter it to reach the hub; the purple portal inside the hub still brings you back to the Exchange. Needs a server restart, no cache repack.
+
 ### Launcher: Staging server switch
 
 Settings has a new Server choice: Live (unchanged) or Staging, the OpenRune revision 242 test world on the same VM. Staging downloads and patches its own client (Microbot 2.6.57) on first Play and keeps its own client files under `servers\staging` in the data folder, so the live client is not touched. Accounts are shared. Staging connects on port 40002 (its jav_config sets the client's build parameter, so the client uses 40000 + world 2 instead of 43594). Only accounts that exist on staging and are on its whitelist can log in.
