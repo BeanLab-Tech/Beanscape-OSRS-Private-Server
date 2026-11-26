@@ -30,6 +30,16 @@ import discord
 from argon2 import PasswordHasher, Type
 from discord import app_commands
 
+# Installed next to this file by deploy/deploy-vm.sh (source: web/central_sync.py); the web
+# panel's copy is the fallback (a deploy run by an older deploy-vm.sh only ships that one).
+try:
+    import central_sync
+except ImportError:
+    import sys
+
+    sys.path.append("/opt/osrs/web")
+    import central_sync
+
 TOKEN_FILE = pathlib.Path("/opt/osrs/config/ned_discord_token")
 DB_PATH = pathlib.Path("/opt/osrs/server/rsmod/.data/saves/game.db")
 # Written by deploy/deploy-vm.sh; the bot announces each new client build once.
@@ -41,7 +51,6 @@ UPDATER_URL = (
 )
 CHANNEL_ID = 1555796182230638715
 
-USERNAME_RE = re.compile(r"^[a-z0-9_ ]{2,12}$")
 ALLOWED_PASSWORD_CHARS = string.ascii_letters + string.digits
 PASSWORD_LENGTH = 16
 COMMAND_COOLDOWN_SECONDS = 30
@@ -70,12 +79,13 @@ def generate_password() -> str:
 
 
 def default_username(user: discord.abc.User) -> str:
-    """Same rule as the web OAuth registration: Discord global name, lowercased, 2-12 chars."""
-    name = getattr(user, "global_name", None) or user.name or ""
-    cleaned = re.sub(r"[^a-z0-9_ ]", "", name.lower())[:12].strip()
-    if len(cleaned) < 2:
-        cleaned = re.sub(r"[^a-z0-9_ ]", "", user.name.lower())[:12].strip()
-    return cleaned
+    """Same rule as the web OAuth registration: the first of the Discord global name and user
+    name that Central accepts, lowercased (letters, numbers, spaces; 2-12)."""
+    for raw in (getattr(user, "global_name", None) or "", user.name or ""):
+        name = central_sync.clean_login_name(re.sub(r"[^a-z0-9 ]", "", raw.lower()))[:12].strip()
+        if name and central_sync.name_problem(name) is None:
+            return name
+    return ""
 
 
 def linked_username(discord_id: int) -> str | None:
@@ -90,12 +100,18 @@ def linked_username(discord_id: int) -> str | None:
 
 
 def register_account(
-    username: str, password: str, discord_id: int | None = None, discord_name: str | None = None
+    username: str,
+    password: str,
+    discord_id: int | None = None,
+    discord_name: str | None = None,
+    mirror: bool = True,
 ) -> str:
-    """Inserts the account row. Returns 'ok', 'taken', 'linked:<name>' or 'error:<msg>'."""
-    username = username.lower().strip()
-    if not USERNAME_RE.match(username):
-        return "error:invalid"
+    """Inserts the account row (and copies it to OpenRune Central unless `mirror` is False).
+    Returns 'ok', 'taken', 'linked:<name>', 'error:invalid:<reason>' or 'error:<msg>'."""
+    problem = central_sync.name_problem(username)
+    if problem is not None:
+        return f"error:invalid:{problem}"
+    username = central_sync.clean_login_name(username)
     try:
         conn = db_connect()
         try:
@@ -105,18 +121,21 @@ def register_account(
                 ).fetchone()
                 if row is not None:
                     return f"linked:{row[0]}"
+            # Taken, or equal ignoring spaces/underscores/case (Central refuses look-alikes).
             row = conn.execute(
-                "SELECT id FROM accounts WHERE login_username = ?", (username,)
+                "SELECT 1 FROM accounts WHERE login_username = ? "
+                "OR lower(replace(replace(login_username, ' ', ''), '_', '')) = ? LIMIT 1",
+                (username, central_sync.collision_key(username)),
             ).fetchone()
             if row is not None:
                 return "taken"
+            pw_hash = ph.hash(password)
             conn.execute(
                 "INSERT INTO accounts (login_username, password_hash, discord_id, discord_username) "
                 "VALUES (?, ?, ?, ?)",
-                (username, ph.hash(password), discord_id, discord_name),
+                (username, pw_hash, discord_id, discord_name),
             )
             conn.commit()
-            return "ok"
         finally:
             conn.close()
     except sqlite3.IntegrityError:
@@ -126,6 +145,9 @@ def register_account(
     except sqlite3.Error as e:
         log.error("db error during registration: %s", e)
         return "error:db"
+    if mirror:
+        central_sync.mirror_signup(username, pw_hash, discord_id)
+    return "ok"
 
 
 def reset_password(discord_id: int, password: str) -> str | None:
@@ -138,53 +160,52 @@ def reset_password(discord_id: int, password: str) -> str | None:
             ).fetchone()
             if row is None:
                 return None
+            pw_hash = ph.hash(password)
             conn.execute(
                 "UPDATE accounts SET password_hash = ? WHERE discord_id = ?",
-                (ph.hash(password), discord_id),
+                (pw_hash, discord_id),
             )
             conn.commit()
-            return row[0]
         finally:
             conn.close()
     except sqlite3.Error as e:
         log.error("db error during password reset: %s", e)
         return None
+    central_sync.mirror_password(row[0], pw_hash, discord_id)
+    return row[0]
+
+
+# Reserved for the boot self-test: sign-up can never create it (the underscore fails the name
+# rules), so deleting it can't remove a player's account.
+SELF_TEST_NAME = "_selftest_"
 
 
 def self_test() -> bool:
-    """Boot self-check: create, verify, and clean up a throwaway account."""
-    password = "systemtest-" + secrets.token_hex(4)
+    """Boot self-check: insert a throwaway account, verify its Argon2 hash, delete it."""
+    password = "selftest-" + secrets.token_hex(4)
     try:
         conn = db_connect()
         try:
-            conn.execute("DELETE FROM accounts WHERE login_username = 'systemtest'")
-            conn.commit()
-        finally:
-            conn.close()
-    except sqlite3.Error:
-        pass
-    result = register_account("systemtest", password)
-    if result != "ok":
-        log.error("self-test registration failed: %s", result)
-        return False
-    try:
-        conn = db_connect()
-        try:
+            conn.execute("DELETE FROM accounts WHERE login_username = ?", (SELF_TEST_NAME,))
+            conn.execute(
+                "INSERT INTO accounts (login_username, password_hash) VALUES (?, ?)",
+                (SELF_TEST_NAME, ph.hash(password)),
+            )
             row = conn.execute(
-                "SELECT password_hash FROM accounts WHERE login_username = 'systemtest'"
+                "SELECT password_hash FROM accounts WHERE login_username = ?", (SELF_TEST_NAME,)
             ).fetchone()
             if row is None:
                 log.error("self-test: inserted row not found")
                 return False
             ph.verify(row[0], password)  # raises on mismatch
-            conn.execute("DELETE FROM accounts WHERE login_username = 'systemtest'")
+            conn.execute("DELETE FROM accounts WHERE login_username = ?", (SELF_TEST_NAME,))
             conn.commit()
         finally:
             conn.close()
         log.info("self-test passed: account insert + argon2 verify + cleanup OK")
         return True
     except Exception as e:
-        log.error("self-test verification failed: %s", e)
+        log.error("self-test failed: %s", e)
         return False
 
 
@@ -217,7 +238,7 @@ async def do_register(interaction: discord.Interaction, username: str | None) ->
     if not await guard(interaction):
         return
     await interaction.response.defer(ephemeral=True, thinking=True)
-    name = (username or default_username(interaction.user)).lower().strip()
+    name = central_sync.clean_login_name(username or default_username(interaction.user))
     password = generate_password()
     result = await asyncio.get_running_loop().run_in_executor(
         None, register_account, name, password, interaction.user.id, str(interaction.user)
@@ -240,10 +261,12 @@ async def do_register(interaction: discord.Interaction, username: str | None) ->
             f"`{name}` is already taken. Press **Register** again and pick another login name.",
             ephemeral=True,
         )
-    elif result == "error:invalid":
+    elif result.startswith("error:invalid"):
+        reason = result.split(":", 2)[2] if result.count(":") >= 2 else ""
+        shown = f"`{name}`" if name else "That name"
         await interaction.followup.send(
-            f"`{name}` isn't a valid login name: use 2-12 lowercase letters, numbers, spaces or "
-            "underscores, e.g. `beanboy`.",
+            f"{shown} can't be used as a login name. {reason} "
+            "Use 2-12 letters, numbers or spaces, e.g. `beanboy`. Press **Register** and try another.",
             ephemeral=True,
         )
     else:
@@ -275,7 +298,7 @@ async def do_reset(interaction: discord.Interaction) -> None:
 
 @tree.command(name="register", description="Create your BeanLab OSRS account (only you see the reply)")
 @app_commands.describe(
-    username="Login name: 2-12 lowercase letters, numbers, spaces or _. Defaults to your Discord name."
+    username="Login name: 2-12 letters, numbers or spaces (no _ or \"mod\"). Defaults to your Discord name."
 )
 async def register_cmd(interaction: discord.Interaction, username: str | None = None):
     await do_register(interaction, username)
@@ -296,7 +319,7 @@ class RegisterModal(discord.ui.Modal, title="Register for BeanLab OSRS"):
         required=False,
         min_length=2,
         max_length=12,
-        placeholder="Blank = your Discord name. 2-12: a-z, 0-9, space, _",
+        placeholder="Blank = your Discord name. 2-12: a-z, 0-9, spaces. No _ or \"mod\".",
     )
 
     async def on_submit(self, interaction: discord.Interaction):

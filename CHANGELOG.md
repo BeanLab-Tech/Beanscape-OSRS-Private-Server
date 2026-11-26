@@ -2,6 +2,12 @@
 
 Bug fixes for the Beanscape server, launcher, and admin plugin. Add new entries at the top. One entry per fix: the date, what broke, and what changed.
 
+## 2026-11-26
+
+### Sign-up also creates your staging account; new login-name rules
+
+Registering (web or Discord) and `/resetpassword` now also write the account into OpenRune Central, the account server of the staging world, so the same username and password work there once staff whitelist you. If Central is down the live sign-up still works and the copy is logged. New login names must follow the staging server's rules or they could never log in there: letters, numbers and single spaces only (underscores are no longer allowed), 2 to 12 characters, nothing containing "mod" or staff-looking words, and no name that equals an existing one once spaces and case are ignored. Existing accounts keep their names. The Discord bot says why a name was refused.
+
 ## 2026-11-25
 
 ### Admin panel: Market Hub map editor

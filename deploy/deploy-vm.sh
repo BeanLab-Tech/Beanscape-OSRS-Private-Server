@@ -101,6 +101,10 @@ if grep -q '^web/requirements.txt' <<<"$changed"; then
     "$WEB/venv/bin/pip" install -q -r "$WEB/requirements.txt"
 fi
 as_osrs install -m 644 "$SRC/discordbot/bot.py" "$BOT/bot.py"
+as_osrs install -m 644 "$SRC/web/central_sync.py" "$BOT/central_sync.py"   # shared with web/
+if grep -q '^discordbot/requirements.txt' <<<"$changed"; then
+    as_osrs "$BOT/venv/bin/pip" install -q -r "$SRC/discordbot/requirements.txt"
+fi
 as_osrs rsync -a "$SRC/webconfig/www/" "$WEBCONFIG/"
 install -m 755 "$SRC/webconfig/serve.py" /opt/osrs/config/webconfig-serve.py
 mkdir -p /etc/systemd/system/osrs-webconfig.service.d /etc/systemd/system/osrs-server.service.d

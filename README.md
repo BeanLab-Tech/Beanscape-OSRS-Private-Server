@@ -354,7 +354,9 @@ Safeguards:
 1. Open `https://runescape-server.tail5475a4.ts.net/oauth/discord/start` and approve in Discord
 2. The page shows your username and a generated 16-character password **once**. Save it.
 
-Your username is your Discord global name (lowercased, 2-12 chars). Discord IDs listed in
+Your username is your Discord global name (lowercased, letters, numbers and spaces, 2-12 chars;
+if that name isn't allowed, your Discord user name; if neither is, the page asks you to use
+`/register` and pick one). Discord IDs listed in
 `admin_discord_ids` (in `/opt/osrs/web/config.json`) get the `admin` username. The sign-in link is
 CSRF-protected: it only works when started from `/oauth/discord/start` in the same browser, within
 10 minutes.
@@ -371,7 +373,7 @@ The same actions as slash commands:
 
 ```
 /register                     # login name defaults to your Discord name
-/register username:<name>     # or pick one: 2-12 lowercase letters, numbers, spaces, _
+/register username:<name>     # or pick one: 2-12 letters, numbers or spaces
 /resetpassword                # new password for the account linked to your Discord
 ```
 
@@ -387,6 +389,13 @@ password. Save it before dismissing the message. No DMs or browser needed.
 - The old `!register` text command now just points to `/register`; a `!register` with anything
   after the username is deleted (needs **Manage Messages**) in case it contained a password.
 - Accounts use Argon2i (m=65536, t=20, p=1), the same as the game server.
+- Login names follow the OpenRune staging server's rules, so the same account works there:
+  letters, numbers and single spaces only (no `_` or symbols), 2-12 characters, nothing containing
+  `mod` or staff-looking words (`jagex`, `support`, `system`, `official`, `customer`, `helpdesk`),
+  and no name that matches an existing one when spaces and case are ignored
+  (`bean boy` = `beanboy`). Accounts made before this rule keep their names on live.
+- Every new account and password reset is also written to OpenRune Central (staging). Staging
+  still needs a whitelist entry before you can log in there (ask staff).
 
 On startup the bot syncs its commands (`synced 2 slash commands`) and posts and pins the
 registration message if it isn't already pinned (`posted registration panel` / `already pinned`;
