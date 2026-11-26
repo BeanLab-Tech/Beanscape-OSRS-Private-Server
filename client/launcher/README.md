@@ -34,7 +34,14 @@ The Updates tab renders `../CHANGELOG.md`, so add every change there.
 
 Data lives in `%APPDATA%\Beanscape Client`. Requires Tailscale joined to the tailnet.
 
-Server host, modulus and the Microbot version/checksum are all in `electron/server-config.cjs`.
+Server host, modulus and the Microbot version/checksum are all in `electron/server-config.cjs`,
+one entry per server (`live`, `staging`). Settings → Server picks which one Play starts.
+
+**Staging** is the OpenRune test world (rev 242, world 2) on the same VM. It pins Microbot
+2.6.57 (class names `ar.class`/`ud.class` in `patch`), keeps its client and home under
+`servers\staging`, and connects on port 40002: its jav_config
+(`https://runescape-server.tail5475a4.ts.net/staging/jav_config.ws`) sets `param=15=1`, so the
+client uses 40000 + world id instead of 43594. Live keeps the original data layout.
 If the server's RSA key changes, update the modulus there and press **Rebuild client**.
 Do not move to a newer Microbot: the server is pinned to rev 233. The live server currently
 publishes 2.6.65, which cannot complete the JS5 handshake. This launcher ignores that and

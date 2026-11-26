@@ -2,7 +2,7 @@
 
 const { app, BrowserWindow, ipcMain, shell, safeStorage } = require('electron');
 const path = require('node:path');
-const cfg = require('./server-config.cjs');
+const serverConfig = require('./server-config.cjs');
 const { tcpReachable } = require('./download.cjs');
 const { findJava, installJava } = require('./java.cjs');
 const client = require('./client.cjs');
@@ -26,8 +26,16 @@ let win = null;
 let busy = false;
 
 const dataDir = () => app.getPath('userData');
-const homeDir = () => client.paths(dataDir(), cfg).home;
-const historyDir = () => path.join(dataDir(), 'history');
+// The server chosen in Settings (live or staging). Read per call so a switch applies to the next Play.
+const cfg = () => serverConfig.forServer(settings.read(dataDir()).server);
+// Live keeps the original layout; other servers get their own client, home and history, because
+// each runs a different Microbot/RuneLite build. Accounts and settings stay shared.
+const serverDir = () => {
+  const id = cfg().id;
+  return id === serverConfig.DEFAULT_SERVER ? dataDir() : path.join(dataDir(), 'servers', id);
+};
+const homeDir = () => client.paths(serverDir(), cfg()).home;
+const historyDir = () => path.join(serverDir(), 'history');
 const pluginDir = () => path.join(homeDir(), '.runelite', 'microbot-plugins');
 
 const send = (channel, payload) => {
@@ -48,7 +56,7 @@ const sampler = sessions.createSampler({
 /** Each launcher account joined with what the Companion plugin last wrote for that character. */
 function accountsState() {
   const pack = accounts.publicState(dataDir());
-  const all = snapshots.readAll(snapshots.companionDir(dataDir()));
+  const all = snapshots.readAll(snapshots.companionDir(serverDir()));
   const running = new Set(sessions.ids());
   return {
     activeId: pack.activeId,
@@ -74,17 +82,18 @@ function recordHistory() {
 
 async function status() {
   const [server, java] = await Promise.all([
-    tcpReachable(cfg.gameHost, cfg.gamePort),
-    findJava(cfg.minJava),
+    tcpReachable(cfg().gameHost, cfg().gamePort),
+    findJava(cfg().minJava),
   ]);
   return {
-    serverName: cfg.name,
+    serverId: cfg().id,
+    serverName: cfg().name,
     server,
     java: java ? { major: java.major } : null,
-    prepared: client.isPrepared(dataDir(), cfg),
+    prepared: client.isPrepared(serverDir(), cfg()),
     running: sessions.ids().length > 0,
     runningIds: sessions.ids(),
-    microbotVersion: cfg.microbot.version,
+    microbotVersion: cfg().microbot.version,
     settings: settings.read(dataDir()),
     busy,
   };
@@ -96,8 +105,8 @@ function updatesState() {
     pluginsDir,
     installedDir: pluginDir(),
     launcherVersion: app.getVersion(),
-    microbotVersion: cfg.microbot.version,
-    adminInstalled: admin.status(dataDir(), adminJar()).installed,
+    microbotVersion: cfg().microbot.version,
+    adminInstalled: admin.status(serverDir(), adminJar()).installed,
   });
 }
 
@@ -123,19 +132,19 @@ async function play(_event, requestedId) {
     const pack = accounts.publicState(dataDir());
     const account = pack.accounts.find((item) => item.id === (requestedId || pack.activeId)) || null;
     if (account && sessions.has(account.id)) return { ok: false, error: `${account.username} is already playing` };
-    const java = await findJava(cfg.minJava);
-    if (!java) return { ok: false, error: `Java ${cfg.minJava}+ not found. Use "Install Java" first.` };
-    if (!client.isPrepared(dataDir(), cfg)) {
-      await client.prepare(dataDir(), cfg, log, (fraction) => send('progress', fraction));
+    const java = await findJava(cfg().minJava);
+    if (!java) return { ok: false, error: `Java ${cfg().minJava}+ not found. Use "Install Java" first.` };
+    if (!client.isPrepared(serverDir(), cfg())) {
+      await client.prepare(serverDir(), cfg(), log, (fraction) => send('progress', fraction));
       send('progress', null);
     }
     if (updates.ensureCompanion(pluginsDir, pluginDir())) log('Installed the Beanscape Companion plugin');
-    if (!(await tcpReachable(cfg.gameHost, cfg.gamePort))) {
+    if (!(await tcpReachable(cfg().gameHost, cfg().gamePort))) {
       log('Warning: game server is not reachable. Is Tailscale connected?');
     }
     if (account) accounts.select(dataDir(), account.id);
     const launchArgs = accounts.prepareLaunch(dataDir(), homeDir());
-    const child = client.launch(dataDir(), cfg, java.javaw, launchArgs, settings.read(dataDir()).memoryMb);
+    const child = client.launch(serverDir(), cfg(), java.javaw, launchArgs, settings.read(dataDir()).memoryMb);
     watchClient(account || { id: `anon-${child.pid}`, username: 'Client' }, child);
     log(account ? `Started ${account.username}` : 'Microbot started');
     return { ok: true };
@@ -151,8 +160,8 @@ async function installJavaFlow() {
   if (busy) return { ok: false, error: 'Already working' };
   busy = true;
   try {
-    log(`Installing ${cfg.javaInstallId} with winget`);
-    const code = await installJava(cfg.javaInstallId, log);
+    log(`Installing ${cfg().javaInstallId} with winget`);
+    const code = await installJava(cfg().javaInstallId, log);
     return code === 0 ? { ok: true } : { ok: false, error: `winget exited with code ${code}` };
   } catch (err) {
     return { ok: false, error: `winget unavailable: ${err.message}` };
@@ -210,7 +219,7 @@ if (!app.requestSingleInstanceLock()) {
       if (busy || sessions.ids().length) return { ok: false, error: 'Close the clients first' };
       busy = true;
       try {
-        await client.prepare(dataDir(), cfg, log, (f) => send('progress', f));
+        await client.prepare(serverDir(), cfg(), log, (f) => send('progress', f));
         send('progress', null);
         return { ok: true };
       } catch (err) {
@@ -220,11 +229,11 @@ if (!app.requestSingleInstanceLock()) {
         busy = false;
       }
     });
-    ipcMain.handle('admin-status', () => admin.status(dataDir(), adminJar()));
+    ipcMain.handle('admin-status', () => admin.status(serverDir(), adminJar()));
     ipcMain.handle('admin-install', (_event, token) => {
       if (sessions.ids().length) return { ok: false, error: 'Close the clients first so they can load the plugin.' };
       try {
-        admin.install(dataDir(), adminJar(), cfg.adminApiUrl, token);
+        admin.install(serverDir(), adminJar(), cfg().adminApiUrl, token);
         return { ok: true };
       } catch (err) {
         return { ok: false, error: err.message };
@@ -232,10 +241,10 @@ if (!app.requestSingleInstanceLock()) {
     });
     ipcMain.handle('admin-remove', () => {
       if (sessions.ids().length) return { ok: false, error: 'Close the clients first.' };
-      admin.remove(dataDir());
+      admin.remove(serverDir());
       return { ok: true };
     });
-    ipcMain.handle('open-register', () => shell.openExternal(cfg.registerUrl));
+    ipcMain.handle('open-register', () => shell.openExternal(cfg().registerUrl));
     ipcMain.handle('open-data', () => shell.openPath(dataDir()));
 
     ipcMain.handle('accounts-state', () => {
@@ -264,7 +273,7 @@ if (!app.requestSingleInstanceLock()) {
       const chosen = scope === 'all' ? pack.accounts : pack.accounts.filter((item) => item.id === id);
       const items = [];
       for (const account of chosen) {
-        const events = feed.readEvents(path.join(snapshots.companionDir(dataDir()), 'events'), account.username);
+        const events = feed.readEvents(path.join(snapshots.companionDir(serverDir()), 'events'), account.username);
         const points = history.query(historyDir(), account.username, 'all');
         for (const item of feed.buildFeed({ events, points, limit: 50 })) {
           items.push({ ...item, character: account.username });
