@@ -251,15 +251,15 @@ internal class HubMap(
         val problems = ArrayList<String>()
 
         fun parse(): HubMap {
-            if (root.path("version").asInt(-1) != VERSION) problems += "version must be $VERSION"
-            val size = root.path("size").asInt(-1)
+            if (root.path("version").wholeInt() != VERSION) problems += "version must be $VERSION"
+            val size = root.path("size").wholeInt()
             if (size !in 8..MAX_SIZE) problems += "size must be 8..$MAX_SIZE"
             val safeSize = if (size in 8..MAX_SIZE) size else 100
 
             val palette = LinkedHashMap<String, Int>()
             for ((name, node) in
                 root.path("palette").fields().asSequence().map { it.key to it.value }) {
-                val id = node.asInt(-1)
+                val id = node.wholeInt()
                 if (id !in 0..MAX_UNDERLAY) problems += "palette.$name must be 0..$MAX_UNDERLAY"
                 palette[name] = id.coerceIn(0, MAX_UNDERLAY)
             }
@@ -420,8 +420,8 @@ internal class HubMap(
                 problems += "$path: unknown side '$sideName'"
                 return Door(Side.West, 0, 0)
             }
-            val from = node.path("from").asInt(-1)
-            val to = node.path("to").asInt(-1)
+            val from = node.path("from").wholeInt()
+            val to = node.path("to").wholeInt()
             val vertical = side == Side.West || side == Side.East
             val lo = if (vertical) room.z0 + 1 else room.x0 + 1
             val hi = if (vertical) room.z1 - 1 else room.x1 - 1
@@ -432,3 +432,9 @@ internal class HubMap(
         }
     }
 }
+
+/**
+ * A JSON integer, or -1. Unlike Jackson's `asInt`, booleans, decimals and numeric strings do not
+ * count: `"version": true` would otherwise read as 1. The web panel's validator does the same.
+ */
+private fun JsonNode.wholeInt(): Int = if (isInt) intValue() else -1

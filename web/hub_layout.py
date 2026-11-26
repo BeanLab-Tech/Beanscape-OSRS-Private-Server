@@ -50,17 +50,11 @@ def _is_int(v: Any) -> bool:
 
 
 def _as_int(v: Any, default: int = -1) -> int:
-    """Jackson's `asInt(default)` for the node types a layout can hold."""
-    if _is_int(v):
-        return v
-    if isinstance(v, float):
-        return int(v)
-    if isinstance(v, str):
-        try:
-            return int(v.strip())
-        except ValueError:
-            return default
-    return default
+    """A JSON integer, or the default: booleans, decimals and numeric strings do not count.
+
+    Matches the server's `HubMap` (`wholeInt`), so `"version": true` is refused on both sides.
+    """
+    return v if _is_int(v) else default
 
 
 def _as_text(v: Any, default: str = "") -> str:
