@@ -6,8 +6,10 @@ group = 'net.runelite.client.plugins.microbot.beanscapeadmin'
 version = '0.1.0'
 
 def pluginJarName = 'BeanscapeAdminPlugin.jar'
-def clientData = file("${System.getenv('APPDATA')}/Beanscape Client")
-def microbotJar = file("${clientData}/original/microbot-2.0.20.jar")
+def clientData = file(findProperty('clientDir') ?: "${System.getenv('APPDATA')}/Beanscape Client")
+// -PmicrobotJar=... compiles against another client, e.g. staging's
+// "%APPDATA%\Beanscape Client\servers\staging\original\microbot-2.6.57.jar".
+def microbotJar = file(findProperty('microbotJar') ?: "${clientData}/original/microbot-2.0.20.jar")
 
 java {
 	toolchain {
@@ -21,6 +23,14 @@ repositories {
 
 dependencies {
 	compileOnly files(microbotJar)
+	testImplementation files(microbotJar)
+	testImplementation platform('org.junit:junit-bom:5.10.2')
+	testImplementation 'org.junit.jupiter:junit-jupiter'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+	useJUnitPlatform()
 }
 
 tasks.withType(JavaCompile).configureEach {

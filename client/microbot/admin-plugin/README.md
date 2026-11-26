@@ -1,8 +1,11 @@
 # Beanscape Admin plugin
 
 An admin console for the BeanLab server, as a Microbot side-loaded plugin: players, items, stats,
-accounts, world tools (broadcast, reboot, teleports) and an audit log. It talks to the server's admin
-API (`content/other/admin-api`) over the tailnet. Owners only for now.
+accounts, world tools (broadcast, reboot, teleports), an audit log and a **Hub map** editor for the
+Market Hub (`docs/HUB_LAYOUT.md`: NPCs, objects, doors, arrival and leave portal; floors are shown
+but need a cache repack to change). It talks to the server's admin API (`content/other/admin-api`)
+over the tailnet. Owners only for now. On a server without the hub (staging, until the hub is
+ported) the Hub map tab says so and stays empty.
 
 It is a normal RuneLite plugin loaded from `home\.runelite\microbot-plugins`, so it needs no change
 to the patched Microbot jar and survives `Update-Client.ps1`.

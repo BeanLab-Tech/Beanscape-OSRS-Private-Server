@@ -38,6 +38,7 @@ final class AdminWindow
 	static final int ACCOUNTS = 3;
 	static final int WORLD = 4;
 	static final int LOG = 5;
+	static final int HUB_MAP = 6;
 
 	private final Session session;
 	private final JDialog frame;
@@ -71,6 +72,7 @@ final class AdminWindow
 			new AccountsPage(session, this),
 			new WorldPage(session, this),
 			new LogPage(session, this),
+			new HubMapPage(session, this),
 		};
 		navs = new Ui.Nav[pages.length];
 		frame = new JDialog(gameWindow(), "Beanscape Admin", java.awt.Dialog.ModalityType.MODELESS);
@@ -282,7 +284,7 @@ final class AdminWindow
 		rail.add(brand);
 		rail.add(Box.createVerticalStrut(22));
 
-		Ui.Glyph[] glyphs = {Ui.Glyph.SHIELD, Ui.Glyph.LOAD, Ui.Glyph.GEAR, Ui.Glyph.LOCK, Ui.Glyph.CLOCK, Ui.Glyph.HUD};
+		Ui.Glyph[] glyphs = {Ui.Glyph.SHIELD, Ui.Glyph.LOAD, Ui.Glyph.GEAR, Ui.Glyph.LOCK, Ui.Glyph.CLOCK, Ui.Glyph.HUD, Ui.Glyph.TARGET};
 		for (int i = 0; i < pages.length; i++)
 		{
 			final int index = i;
