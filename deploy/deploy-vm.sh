@@ -67,7 +67,9 @@ if [ "$current" = none ] || [ "$FORCE" = "--force" ] || ! git -C "$SRC" cat-file
 else
     changed=$(git -C "$SRC" diff --name-only "$current" "$target")
 fi
-if ! echo "$changed" | grep -qE '^(api|content|web|discordbot|webconfig|client|deploy)/'; then
+# Here-strings, not `echo | grep -q`: with pipefail, grep -q exiting early on a long list (e.g. all
+# of `git ls-files` on --force) kills echo with SIGPIPE and the pipeline reads as "no match".
+if ! grep -qE '^(api|content|web|discordbot|webconfig|client|deploy)/' <<<"$changed"; then
     log "main ${target:0:7}: docs-only change, recording without restart"
     echo "$target" > "$BASE/deployed-sha"
     exit 0
@@ -95,7 +97,7 @@ ls -1t "$BACKUPS"/game-*-pre-deploy.db 2>/dev/null | tail -n +21 | xargs -r rm -
 rsync -a --exclude 'config.json' --exclude 'env' --exclude 'admin_config.json' \
     --exclude 'config.example.json' --exclude '__pycache__' --exclude 'venv' \
     --exclude '*.service' --exclude 'install.sh' --exclude 'README.md' "$SRC/web/" "$WEB/"
-if echo "$changed" | grep -q '^web/requirements.txt'; then
+if grep -q '^web/requirements.txt' <<<"$changed"; then
     "$WEB/venv/bin/pip" install -q -r "$WEB/requirements.txt"
 fi
 as_osrs install -m 644 "$SRC/discordbot/bot.py" "$BOT/bot.py"
