@@ -143,7 +143,7 @@ async function play(_event, requestedId) {
       log('Warning: game server is not reachable. Is Tailscale connected?');
     }
     if (account) accounts.select(dataDir(), account.id);
-    const launchArgs = accounts.prepareLaunch(dataDir(), homeDir());
+    const launchArgs = accounts.prepareLaunch(dataDir(), homeDir(), cfg().world);
     const child = client.launch(serverDir(), cfg(), java.javaw, launchArgs, settings.read(dataDir()).memoryMb);
     watchClient(account || { id: `anon-${child.pid}`, username: 'Client' }, child);
     log(account ? `Started ${account.username}` : 'Microbot started');

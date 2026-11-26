@@ -54,15 +54,21 @@ function upsertProperty(file, key, value) {
     text = '';
   }
   const line = `${key}=${value}`;
-  const re = new RegExp(`^${key.replace(/\./g, '\\.')}=.*$`, 'm');
+  const re = new RegExp(`^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}=.*$`, 'm');
   if (re.test(text)) text = text.replace(re, line);
   else text = `${text.replace(/\s*$/, '')}${text.trim() ? '\n' : ''}${line}\n`;
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, text);
 }
 
-/** Writes the active username into the isolated Microbot home and returns client args. */
-function writeLegacyProfile(homeDir, username, password) {
+// Microbot's AutoLogin world; the properties file spells the key "World\ Preferred".
+const AUTOLOGIN_WORLD_KEY = 'AutoLoginConfig.World\\ Preferred';
+
+/**
+ * Writes the active username into the isolated Microbot home and returns client args. `world`
+ * pins AutoLogin to the server's world; without it AutoLogin can pick a real Jagex world.
+ */
+function writeLegacyProfile(homeDir, username, password, world) {
   const dir = path.join(homeDir, '.runelite', 'microbot-profiles');
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, 'profiles.json');
@@ -100,6 +106,9 @@ function writeLegacyProfile(homeDir, username, password) {
     'runelite.autologinplugin',
     'true',
   );
+  if (Number.isInteger(world) && world > 0) {
+    upsertProperty(path.join(dir, `${username}-${target.id}.properties`), AUTOLOGIN_WORLD_KEY, String(world));
+  }
   return ['--profile', username, '--clean-jagex-launcher'];
 }
 
@@ -186,7 +195,7 @@ function bind(safeStorage) {
     return publicState(userDataDir);
   }
 
-  function prepareLaunch(userDataDir, homeDir) {
+  function prepareLaunch(userDataDir, homeDir, world) {
     const store = readStore(userDataDir);
     const account = store.accounts.find((item) => item.id === store.activeId);
     if (!account) return [];
@@ -194,7 +203,7 @@ function bind(safeStorage) {
     if (!password) {
       throw new Error(`Could not read the password for ${account.username}. Edit the account and enter it again.`);
     }
-    return writeLegacyProfile(homeDir, account.username, password);
+    return writeLegacyProfile(homeDir, account.username, password, world);
   }
 
   return { publicState, save, select, remove, prepareLaunch };
