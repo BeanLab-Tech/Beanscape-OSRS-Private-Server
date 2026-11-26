@@ -3,7 +3,7 @@ plugins {
 }
 
 group = 'net.runelite.client.plugins.microbot.beanscapecompanion'
-version = '1.0.0'
+version = '1.0.1'
 
 def pluginJarName = 'BeanscapeCompanion.jar'
 def clientData = file("${System.getenv('APPDATA')}/Beanscape Client")
