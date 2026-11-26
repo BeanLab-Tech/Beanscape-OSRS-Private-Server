@@ -4,6 +4,10 @@ Bug fixes for the Beanscape server, launcher, and admin plugin. Add new entries 
 
 ## 2026-11-25
 
+### Admin panel: Market Hub map editor
+
+The web admin panel has a Market Hub page (`/admin/hub`) that draws the hub from its layout file and edits floors, rooms, doors, walls, objects, NPCs, the arrival tile and the leave portal. Save checks the layout with the same rules as the server and lists every problem; a valid layout is written to the server's override file with one backup kept, and the page says whether the edit needs only a server restart or also a cache repack (floors). Both checkers now also refuse `true`, decimals and quoted numbers where a whole number belongs, so the panel and the server never disagree about a file. Saving does not restart the server.
+
 ### Launcher: Staging server switch
 
 Settings has a new Server choice: Live (unchanged) or Staging, the OpenRune revision 242 test world on the same VM. Staging downloads and patches its own client (Microbot 2.6.57) on first Play and keeps its own client files under `servers\staging` in the data folder, so the live client is not touched. Accounts are shared. Staging connects on port 40002 (its jav_config sets the client's build parameter, so the client uses 40000 + world 2 instead of 43594). Only accounts that exist on staging and are on its whitelist can log in.
