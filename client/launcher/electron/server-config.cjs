@@ -20,6 +20,8 @@ const SERVERS = {
     // Direct game port check (tailnet IP of VM 123). Reachable only when Tailscale is connected.
     gameHost: VM_TAILNET_IP,
     gamePort: 43594,
+    // World id in this server's world list; Microbot's AutoLogin is pinned to it.
+    world: 1,
     // Server's public RSA login modulus (1024-bit, hex).
     modulus:
       'd6ac773e2baf663e78d82337e3f1e4ccd46e2b4b4235e6be93f11bbb445a3c7a3a01f1dac3feee2a0e14740cda715ec18f6d746e67ef7a50e876041f6ac3db95abbf8b6ce9973cc05d134d4afa35d749831fb2073f42644360d6da342d62f95479c2be2650cade3aeba76e73a05495fe8f6bb871dcb2e657b34e20b0ed94bf13',
@@ -43,13 +45,14 @@ const SERVERS = {
   staging: {
     id: 'staging',
     name: 'Beanscape Staging (OpenRune 242)',
-    // Unset: RuneLite's own API serves world list and prices for rev 242.
-    httpServiceUrl: null,
+    // World list (world 2 only) and prices from the VM, so AutoLogin never picks a Jagex world.
+    httpServiceUrl: `https://${TAILNET_HOST}/staging/runelite`,
     javConfigUrl: `https://${TAILNET_HOST}/staging/jav_config.ws`,
     adminApiUrl: `https://${TAILNET_HOST}/adminapi-staging`,
     registerUrl: `https://${TAILNET_HOST}/oauth/discord/start`,
     gameHost: VM_TAILNET_IP,
     gamePort: 40002,
+    world: 2,
     modulus:
       '8a6ff7e30bc475169a971ff148caa8d2c2f8efcb204b778ee9fd7422740e9c6747c34bcc6cd0811a8a01067b9a53eb0c40f9dbd90a34e24c3074e2d54a86d2ddacb385c9365f3729806f6a82dbd78e90965d2ee86f76920ad631f206acc69417f1b317f59cb0555ac0f8e66fe20044e74c75b1af6929d96d99bc3129ed17eefb',
     // Rev 242 = Microbot 2.6.57 (RuneLite 1.13.6). Bump together with OpenRune's revision.

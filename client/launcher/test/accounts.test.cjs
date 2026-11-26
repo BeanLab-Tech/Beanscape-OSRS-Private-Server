@@ -63,6 +63,26 @@ test('prepareLaunch writes the Microbot profile into the isolated home', () => {
   assert.match(props, /^runelite\.autologinplugin=true$/m);
 });
 
+test('prepareLaunch pins AutoLogin to the server world, replacing a stale one', () => {
+  const dir = setup();
+  const home = path.join(dir, 'home');
+  const api = accounts.bind(fakeStorage());
+  api.save(dir, { username: 'oak', password: 'hunter2' });
+  api.prepareLaunch(dir, home);
+  const profiles = JSON.parse(
+    fs.readFileSync(path.join(home, '.runelite', 'microbot-profiles', 'profiles.json'), 'utf8'),
+  );
+  const file = path.join(home, '.runelite', 'microbot-profiles', `oak-${profiles.profiles[0].id}.properties`);
+  // Microbot wrote a real Jagex world on an earlier run.
+  fs.appendFileSync(file, 'AutoLoginConfig.World\\ Preferred=360\nAutoLoginConfig.Members\\ Only=true\n');
+  api.prepareLaunch(dir, home, 2);
+  const props = fs.readFileSync(file, 'utf8');
+  assert.match(props, /^AutoLoginConfig\.World\\ Preferred=2$/m);
+  assert.ok(!props.includes('=360'));
+  assert.match(props, /^AutoLoginConfig\.Members\\ Only=true$/m);
+  assert.strictEqual(props.match(/World\\ Preferred/g).length, 1);
+});
+
 test('a blank password on edit keeps the saved one', () => {
   const dir = setup();
   const api = accounts.bind(fakeStorage());
