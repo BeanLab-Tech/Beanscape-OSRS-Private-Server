@@ -223,8 +223,10 @@ public class CompanionPlugin extends Plugin
 			SnapshotWriter.write(dir, snapshot);
 			lastWrite = System.currentTimeMillis();
 		}
-		catch (Exception e)
+		catch (Exception | LinkageError e)
 		{
+			// LinkageError: an API that differs between RuneLite versions. Never let it reach the
+			// client thread, where it stops the game loop.
 			log.warn("Beanscape Companion export failed", e);
 		}
 	}
