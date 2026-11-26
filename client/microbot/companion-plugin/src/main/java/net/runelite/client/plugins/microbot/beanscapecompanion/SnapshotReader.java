@@ -1,5 +1,6 @@
 package net.runelite.client.plugins.microbot.beanscapecompanion;
 
+import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.Locale;
 import net.runelite.api.Client;
@@ -21,11 +22,43 @@ final class SnapshotReader
 	private final Client client;
 	private final ItemManager itemManager;
 	private final BankMemory bank = new BankMemory();
+	// getItemPrice(int) returns int on RuneLite 1.11 (live) and long on 1.13 (staging). Calling it
+	// directly links against one return type and throws NoSuchMethodError on the other client.
+	private final Method itemPrice;
 
 	SnapshotReader(Client client, ItemManager itemManager)
 	{
 		this.client = client;
 		this.itemManager = itemManager;
+		this.itemPrice = findItemPrice();
+	}
+
+	private static Method findItemPrice()
+	{
+		try
+		{
+			return ItemManager.class.getMethod("getItemPrice", int.class);
+		}
+		catch (NoSuchMethodException e)
+		{
+			return null;
+		}
+	}
+
+	private long price(int id)
+	{
+		if (itemPrice == null)
+		{
+			return 0;
+		}
+		try
+		{
+			return ((Number) itemPrice.invoke(itemManager, id)).longValue();
+		}
+		catch (ReflectiveOperationException | ClassCastException e)
+		{
+			return 0;
+		}
 	}
 
 	void rememberBank()
@@ -135,7 +168,7 @@ final class SnapshotReader
 				continue;
 			}
 			int id = itemManager.canonicalize(item.getId());
-			total += itemManager.getItemPrice(id) * (long) item.getQuantity();
+			total += price(id) * item.getQuantity();
 		}
 		return total;
 	}
