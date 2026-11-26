@@ -4,14 +4,6 @@ Bug fixes for the Beanscape server, launcher, and admin plugin. Add new entries 
 
 ## 2026-11-25
 
-### Staging froze the moment you entered the world
-
-On staging (RuneLite 1.13.6) the game froze on the first tick after login. The Beanscape Companion plugin was built against live's RuneLite 1.11.19, where `ItemManager.getItemPrice` returns `int`; on 1.13.6 it returns `long`, so the plugin threw `NoSuchMethodError` on the client thread and stopped the game loop. Companion 1.0.1 looks the method up at runtime and works on both clients, and a failed export is now logged instead of reaching the client thread. Pull and press Play: the launcher replaces the installed plugin. Live was not affected.
-
-### Market Hub portal was gone from the Grand Exchange
-
-The purple Soul Wars portal to the Market Hub no longer showed on the Grand Exchange plaza. The entrance is now a copy of the clan hall portal, standing where the plaza bench was (3182, 3468; the bench is removed). Enter it to reach the hub; the purple portal inside the hub still brings you back to the Exchange. Needs a server restart, no cache repack.
-
 ### Admin panel: Market Hub map editor
 
 The web admin panel has a Market Hub page (`/admin/hub`) that draws the hub from its layout file and edits floors, rooms, doors, walls, objects, NPCs, the arrival tile and the leave portal. Save checks the layout with the same rules as the server and lists every problem; a valid layout is written to the server's override file with one backup kept, and the page says whether the edit needs only a server restart or also a cache repack (floors). Both checkers now also refuse `true`, decimals and quoted numbers where a whole number belongs, so the panel and the server never disagree about a file. Saving does not restart the server.
@@ -23,6 +15,14 @@ The Beanscape Admin console has a new Hub map tab for owners. It draws the Marke
 ### `::hub` commands edit the Market Hub in game
 
 Admins can now place and remove hub NPCs, objects and wall runs with `::hub npc`, `::hub loc`, `::hub wall` and `::hub rm`, undo with `::hub undo`, and write the layout with `::hub save` (validated first, atomic, previous file kept as `.bak`). Changes show to everyone immediately; a restart loads the saved file. `::hub tp`, `::hub where` and `::hub help` round it out. Floors still need a repack. See `docs/HUB_LAYOUT.md`.
+
+### Staging froze the moment you entered the world
+
+On staging (RuneLite 1.13.6) the game froze on the first tick after login. The Beanscape Companion plugin was built against live's RuneLite 1.11.19, where `ItemManager.getItemPrice` returns `int`; on 1.13.6 it returns `long`, so the plugin threw `NoSuchMethodError` on the client thread and stopped the game loop. Companion 1.0.1 looks the method up at runtime and works on both clients, and a failed export is now logged instead of reaching the client thread. Pull and press Play: the launcher replaces the installed plugin. Live was not affected.
+
+### Market Hub portal was gone from the Grand Exchange
+
+The purple Soul Wars portal to the Market Hub no longer showed on the Grand Exchange plaza. The entrance is now a copy of the clan hall portal, standing where the plaza bench was (3182, 3468; the bench is removed). Enter it to reach the hub; the purple portal inside the hub still brings you back to the Exchange. Needs a server restart, no cache repack.
 
 ### Launcher: Staging server switch
 
