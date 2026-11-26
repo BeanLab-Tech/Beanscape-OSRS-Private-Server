@@ -32,6 +32,8 @@ from argon2 import PasswordHasher, Type
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+import central_sync
+
 BASE = pathlib.Path(__file__).resolve().parent
 CONFIG_PATH = pathlib.Path(
     __import__("os").environ.get("OSRS_WEB_CONFIG", f"{BASE}/config.json")
@@ -40,7 +42,6 @@ CONFIG_PATH = pathlib.Path(
 # --- same hasher as the game (api/pw-hash Argon2PasswordHashing: 20/65536/1, argon2i) ---
 PH = PasswordHasher(time_cost=20, memory_cost=65536, parallelism=1, type=Type.I)
 
-USERNAME_RE = re.compile(r"^[a-z0-9_ ]{2,12}$")
 ALLOWED_PASSWORD_CHARS = string.ascii_letters + string.digits
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -78,17 +79,37 @@ def db_connect() -> sqlite3.Connection:
     return conn
 
 
+def name_taken(conn: sqlite3.Connection, username: str) -> bool:
+    """Taken, or equal ignoring spaces/underscores/case (Central refuses such look-alikes)."""
+    key = central_sync.collision_key(username)
+    row = conn.execute(
+        "SELECT 1 FROM accounts WHERE login_username = ? "
+        "OR lower(replace(replace(login_username, ' ', ''), '_', '')) = ? LIMIT 1",
+        (username, key),
+    ).fetchone()
+    return row is not None
+
+
+def pick_username(*candidates: str) -> str | None:
+    """First Discord-derived name Central would accept as a login name."""
+    for raw in candidates:
+        name = central_sync.clean_login_name(re.sub(r"[^a-z0-9 ]", "", (raw or "").lower()))[:12].strip()
+        if name and central_sync.name_problem(name) is None:
+            return name
+    return None
+
+
 def register_account(username: str, password: str, discord_id: int, discord_username: str,
-                     discord_avatar: str | None = None) -> str:
-    """Inserts the account row. Returns 'ok', 'taken' or 'error:<msg>'."""
-    username = username.lower().strip()
-    if not USERNAME_RE.match(username):
+                     discord_avatar: str | None = None, mirror: bool = True) -> str:
+    """Inserts the account row (and copies it to OpenRune Central unless `mirror` is False).
+    Returns 'ok', 'taken' or 'error:<msg>'."""
+    username = central_sync.clean_login_name(username)
+    if central_sync.name_problem(username) is not None:
         return "error:invalid"
     try:
         conn = db_connect()
         try:
-            row = conn.execute("SELECT id FROM accounts WHERE login_username = ?", (username,)).fetchone()
-            if row is not None:
+            if name_taken(conn, username):
                 return "taken"
             pw_hash = PH.hash(password)
             conn.execute(
@@ -97,12 +118,14 @@ def register_account(username: str, password: str, discord_id: int, discord_user
                 (username, pw_hash, discord_id, discord_username, discord_avatar),
             )
             conn.commit()
-            return "ok"
         finally:
             conn.close()
     except sqlite3.Error as e:
         log.error("db error during registration: %s", e)
         return "error:db"
+    if mirror:
+        central_sync.mirror_signup(username, pw_hash, discord_id or None)
+    return "ok"
 
 
 def self_test() -> bool:
@@ -111,13 +134,13 @@ def self_test() -> bool:
     try:
         conn = db_connect()
         try:
-            conn.execute("DELETE FROM accounts WHERE login_username = 'systemtest'")
+            conn.execute("DELETE FROM accounts WHERE login_username = 'beanselftest'")
             conn.commit()
         finally:
             conn.close()
     except sqlite3.Error:
         pass
-    result = register_account("systemtest", password, 0, "systemtest")
+    result = register_account("beanselftest", password, 0, "systemtest", mirror=False)
     if result != "ok":
         log.error("self-test registration failed: %s", result)
         return False
@@ -125,13 +148,13 @@ def self_test() -> bool:
         conn = db_connect()
         try:
             row = conn.execute(
-                "SELECT password_hash FROM accounts WHERE login_username = 'systemtest'"
+                "SELECT password_hash FROM accounts WHERE login_username = 'beanselftest'"
             ).fetchone()
             if row is None:
                 log.error("self-test: inserted row not found")
                 return False
             PH.verify(row[0], password)  # raises on mismatch
-            conn.execute("DELETE FROM accounts WHERE login_username = 'systemtest'")
+            conn.execute("DELETE FROM accounts WHERE login_username = 'beanselftest'")
             conn.commit()
             log.info("self-test passed: account insert + argon2 verify + cleanup OK")
             return True
@@ -294,11 +317,22 @@ async def oauth_callback(
     user = me.json()
     discord_id = int(user["id"])
     global_name = user.get("global_name") or user.get("username") or ""
-    username = re.sub(r"[^a-z0-9_ ]", "", global_name.lower())[:12].strip()
-    if len(username) < 2:
-        username = user.get("username", "discord")[:12].lower()
+    username = pick_username(global_name, user.get("username", ""))
     if discord_id in CFG.admin_discord_ids:
         username = "admin"
+    if username is None:
+        resp = HTMLResponse(
+            "<!doctype html><html><head><meta charset='utf-8'><title>BeanLab OSRS</title></head>"
+            "<body style='font-family:system-ui,sans-serif;max-width:640px;margin:4rem auto'>"
+            "<h1>Pick a login name</h1><p>Your Discord name can't be used as a login name "
+            "(letters, numbers and spaces only, at most 12, no \"mod\" or staff-looking names). "
+            "Register with <b>/register</b> in the Discord registration channel and choose one.</p>"
+            "</body></html>",
+            status_code=400,
+        )
+        resp.delete_cookie(STATE_COOKIE, path="/oauth/discord")
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
 
     password = "".join(secrets.choice(ALLOWED_PASSWORD_CHARS) for _ in range(16))
     avatar_hash = user.get("avatar") or None  # Discord CDN hash; the admin console shows it
