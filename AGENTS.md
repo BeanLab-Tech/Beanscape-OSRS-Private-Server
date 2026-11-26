@@ -3,6 +3,10 @@
 Context for AI coding agents (Claude Code, Codex, OpenCode, …). This is the single source of
 truth for agents; `CLAUDE.md` imports it. Latest audit: `docs/AUDIT_2026-10-29.md`.
 
+**Keep this file current.** Any PR that adds a module, migration, service, port, repo or workflow
+updates this file (and `README.md` for player/admin-facing changes) in the same PR. The staging
+server's guide is `UPSTREAM.md` in `BeanLab-Tech/Beanscape-OpenRune`; keep the two consistent.
+
 ---
 
 ## What This Repo Is
@@ -18,6 +22,8 @@ api/db/src/main/resources/db/migration/
   V10__discord_oauth.sql             Discord OAuth columns
   V11__beanlab_members_for_all.sql   every account members
   V12__admin_api.sql                 admin_tokens + admin_audit (admin console API)
+  V13__beanlab_registered_characters.sql    characters rows for accounts made outside the game
+  V14__beanlab_safe_auto_display_names.sql  safer auto display names (no case clashes, no staff names)
   V15__discord_avatar.sql            accounts.discord_avatar (profile picture in the admin console)
   V16__beanlab_farming_and_poh.sql   beanlab_farming_patches + beanlab_poh_furniture
 api/account/.../CharacterAccountApplier.kt   forces player.members = true at login; moves players
@@ -46,6 +52,9 @@ content/other/beanlab-construction/  sawmill + instanced starter house (RegionTe
                                      Rimmington garden/parlour/workshop templates), DB (V16)
 content/other/beanlab-worldmap/      minimap globe -> worldmap (595) in map_container; sends
                                      worldmap_transmitdata (1749) on movement while open
+content/other/beanlab-soulwars/      Soul Wars portal at the GE -> Market Hub (x 5120-5219); layout in
+                                     hub-layout.json (docs/HUB_LAYOUT.md), terrain packed into cache
+content/other/beanlab-spawns/        static NPC spawns outside Lumbridge (WorldNpcSpawnScript)
 content/other/grandexchange/         GE engine (GeBook), ::ge commands (GeCommands), tests
 content/other/commands/.../NameChangeCommands.kt   ::name
 web/                                 Discord registration + admin panel (FastAPI)
@@ -56,6 +65,12 @@ client/microbot/                     patch-microbot.py (Microbot 2.0.20 -> BeanL
 client/microbot/admin-plugin/        Beanscape Admin plugin (Java 11, Gradle wrapper): side-loaded
                                      into home\.runelite\microbot-plugins; Install-AdminPlugin.ps1
                                      builds and installs it. Talks to content/other/admin-api.
+client/microbot/companion-plugin/    Beanscape Companion plugin (character stats and feed for the
+                                     launcher's Home tab)
+client/launcher/                     Electron launcher: one entry per server in
+                                     electron/server-config.cjs (live = rev 233 / Microbot 2.0.20,
+                                     staging = OpenRune 242 / Microbot 2.6.57); Settings -> Server
+                                     picks one; plugins/ bundles the Admin + Companion jars
 deploy/                              VM auto-deploy: deploy-vm.sh (timer every 5 min, CI-green main
                                      only, build-then-restart), systemd units, install.sh
 webconfig/                           www/ = /opt/osrs/config/webconfig on the VM (jav_config.ws,
@@ -74,6 +89,42 @@ token file), RSProx client config (`~/.rsprox/` on Windows), runtime data (`.dat
 
 ---
 
+## Repositories and Local Layout
+
+| Repo | What | Clone on bean-laptop |
+|---|---|---|
+| `BeanLab-Tech/Beanscape-OSRS-Private-Server` (this one) | Live server overlay (RsMod rev 233), launcher, plugins, web panel, Discord bot, VM deploy | `C:\Users\cfiaschetti\Beanscape-OSRS-Private-Server` |
+| `BeanLab-Tech/Beanscape-OpenRune` | Fork of OpenRune-Server (rev 242), the migration target, running as **staging**. Its `UPSTREAM.md` is its Beanscape guide | `C:\Users\cfiaschetti\Beanscape-OpenRune` |
+
+The launcher lives only here (`client/launcher`), for live and staging alike.
+
+---
+
+## OpenRune Migration (Staging)
+
+Plan: `docs/OPENRUNE_PHASE1_PLAN.md`. Phase 1 status, 2026-11-25:
+
+| Workstream | Status |
+|---|---|
+| W1 fork + CI, W2 Postgres + Central on the VM | Done |
+| W3 accounts | `require_registration` enforced at login (fork, `// BeanLab:`). Discord sign-up and password reset still write only the live SQLite DB, not Central |
+| W4 admin API | Done (`content/beanlab/beanlab-admin-api` in the fork); the Admin plugin loads on RuneLite 1.13.6 |
+| W5 Grand Exchange | Done (`beanlab-ge`) |
+| W6 small features (`::name`, `::teleports`, `::questsdone`, potato), W7 client pipeline, W9 data migration | Not started |
+| W8 deploy | Manual on the VM (fork `deploy/staging/README.md`); no auto-deploy yet |
+
+Staging on VM 123, next to live:
+
+| Piece | Where |
+|---|---|
+| Game | `beanscape-staging` service, `/opt/osrs/openrune/server` (fork `main`), world 2, **port 40002** |
+| Why 40002 | The client has no port setting. With jav_config `param=15` (build) non-zero it connects to `40000 + world`. Staging's jav_config sets that: `https://runescape-server.tail5475a4.ts.net/staging/jav_config.ws` (files in `/opt/osrs/config/webconfig/staging/`) |
+| Accounts | OpenRune Central (`openrune-central`, Postgres `openrune_central`, `public.accounts`). Registration required, plus `world_login_whitelist` for world 2. Owner = `ADMINISTRATOR` rights plus a row in `beanlab.owners` |
+| Admin API | `127.0.0.1:8088`, exposed as `https://runescape-server.tail5475a4.ts.net/adminapi-staging` |
+| Secrets | `/opt/osrs/openrune/secrets.env` and the VM copies of `central-config.yaml` and `game.yml` only |
+
+---
+
 ## Build & Test
 
 Prerequisites: JDK 21 (a full JDK; the RuneLite launcher also needs `jdk.security.jarsigner`).
@@ -89,6 +140,13 @@ script. Fix formatting with `scripts/build-overlay.sh :content:other:grandexchan
 and copy the result back (formatting is ktfmt kotlinlang style, max width 100).
 
 On the VM: `sudo systemctl restart osrs-server`, logs `journalctl -u osrs-server -f`.
+
+**Merging to `main` can restart live.** `deploy/deploy-vm.sh` deploys every CI-green `main` within
+5 minutes and restarts the live server when the change touches `api/`, `content/`, `web/`,
+`discordbot/`, `webconfig/`, `client/` or `deploy/` (online players are saved first). Changes to
+anything else (docs, `AGENTS.md`, `README.md`, `CHANGELOG.md`) deploy without a restart.
+
+Launcher: `cd client/launcher; npm install; npm test; npm start`.
 
 ---
 
@@ -208,3 +266,8 @@ path works with plain `git push`. The VM cannot reach the tailnet, hence sudo-SS
    (audit §4).
 3. node-exporter on `tag:game` is not scraped (ACL decision pending).
 4. GE state and player inventories are saved in separate transactions (audit R6).
+5. Launcher on Node 26: `npm install` can leave Electron unpacked ("Electron failed to install
+   correctly"). The download is cached; unpack
+   `%LOCALAPPDATA%\electron\Cache\<hash>\electron-v33.4.11-win32-x64.zip` into
+   `client\launcher\node_modules\electron\dist` and write `electron.exe` (no newline) to
+   `node_modules\electron\path.txt`.
