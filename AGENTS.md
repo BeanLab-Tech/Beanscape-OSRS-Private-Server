@@ -122,7 +122,7 @@ Staging on VM 123, next to live:
 | Accounts | OpenRune Central (`openrune-central`, Postgres `openrune_central`, `public.accounts`). Registration required, plus `world_login_whitelist` for world 2. Owner = `ADMINISTRATOR` rights plus a row in `beanlab.owners` |
 | Admin API | `127.0.0.1:8088`, exposed as `https://runescape-server.tail5475a4.ts.net/adminapi-staging`. Tokens: `::admintoken` in game (owners), or `beanlab.admin_tokens` (SHA-256 of the raw token) |
 | Central | Runs OpenRune-Central `d694191` **plus the fork's `deploy/central/patches/`**: unpatched, every login to a whitelisted world fails with "No reply from loginserver" |
-| Client side | The launcher's staging entry uses `https://runescape-server.tail5475a4.ts.net/staging/runelite` (world list with world 2 only) and pins Microbot AutoLogin to world 2. On Microbot 2.6.57 AutoLogin fills the username but not the password; players type it |
+| Client side | The launcher's staging entry uses `https://runescape-server.tail5475a4.ts.net/staging/runelite` (world list with world 2 only) and pins Microbot AutoLogin to world 2. AutoLogin works on Microbot 2.6.57: the first attempt lands on the rev 242 "The move is almost here" notice and fails, the retry ~5 s later logs in. A failed login clears the password field, so a blank password after failures is a symptom, not the cause |
 | Bots | OpenRune's cosmetic bots are on (`gameplay.bots-enabled`); `::bots count|on|off|here` in game |
 | Secrets | `/opt/osrs/openrune/secrets.env` and the VM copies of `central-config.yaml` and `game.yml` only |
 
