@@ -1,6 +1,6 @@
 # Market Hub layout file
 
-The Market Hub (the area behind the purple Soul Wars portal at the Grand Exchange) is described by
+The Market Hub (the area behind the clan hall portal on the Grand Exchange plaza) is described by
 one JSON file. The server, the terrain generator and the planned editors (web, in-game commands,
 client plugin) all read and write this same format.
 

@@ -52,8 +52,9 @@ content/other/beanlab-construction/  sawmill + instanced starter house (RegionTe
                                      Rimmington garden/parlour/workshop templates), DB (V16)
 content/other/beanlab-worldmap/      minimap globe -> worldmap (595) in map_container; sends
                                      worldmap_transmitdata (1749) on movement while open
-content/other/beanlab-soulwars/      Soul Wars portal at the GE -> Market Hub (x 5120-5219); layout in
-                                     hub-layout.json (docs/HUB_LAYOUT.md), terrain packed into cache
+content/other/beanlab-soulwars/      clan hall portal on the GE plaza (3182, 3468) -> Market Hub
+                                     (x 5120-5219); layout in hub-layout.json (docs/HUB_LAYOUT.md),
+                                     terrain packed into cache
 content/other/beanlab-spawns/        static NPC spawns outside Lumbridge (WorldNpcSpawnScript)
 content/other/grandexchange/         GE engine (GeBook), ::ge commands (GeCommands), tests
 content/other/commands/.../NameChangeCommands.kt   ::name
