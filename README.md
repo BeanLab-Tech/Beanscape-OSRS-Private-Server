@@ -58,6 +58,8 @@ fork) or RuneLite via RSProx, locked behind the tailnet.
 | Construction | `content/other/beanlab-construction/` | Sawmill planks; starter house (garden, parlour, workshop) with build mode; V16 `beanlab_poh_furniture` |
 | World map | `content/other/beanlab-worldmap/` | Minimap globe opens the world map; your marker follows you while it's open |
 | Microbot client patcher + launcher | `client/microbot/` | Microbot 2.0.20 = RuneLite 1.11.19 = rev 233 |
+| Beanscape launcher (Electron) | `client/launcher/` | Downloads, patches and starts Microbot; Settings → Server switches between Live and Staging |
+| Staging world (OpenRune rev 242) | [Beanscape-OpenRune](https://github.com/BeanLab-Tech/Beanscape-OpenRune) | Test world on the same VM, port 40002; staff accounts only for now |
 | Client webconfig | `webconfig/` (`osrs-webconfig`) | `jav_config.ws`, `world_list.ws`, RuneLite `worlds.js`, version file; served no-cache |
 
 ### Not yet implemented
