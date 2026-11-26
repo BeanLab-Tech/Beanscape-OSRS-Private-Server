@@ -43,6 +43,14 @@ function log(actor, action, detail) {
   audit.length = Math.min(audit.length, 200);
 }
 
+// Hub layout: the real bundled file when run from the repo, edits kept in memory only.
+let hubSaved = null;
+function hubLayout() {
+  if (hubSaved) return hubSaved;
+  const file = require('node:path').join(__dirname, '..', '..', '..', '..', 'content', 'other', 'beanlab-soulwars', 'src', 'main', 'resources', 'org', 'rsmod', 'content', 'other', 'beanlab', 'soulwars', 'hub-layout.json');
+  return JSON.parse(require('node:fs').readFileSync(file, 'utf8'));
+}
+
 function send(res, status, body) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -105,8 +113,22 @@ const server = http.createServer((req, res) => {
       if (i >= 0) { log(ME.name, 'delete-account', accounts[i].username); accounts.splice(i, 1); }
       return send(res, 200, { ok: true, message: 'Deleted' });
     }
+    if (req.method === 'GET' && path === '/v1/hub/layout') {
+      return send(res, 200, { source: hubSaved ? 'override' : 'bundled', layout: hubLayout(), floorsEditable: false, note: 'Walls, objects and NPCs apply after a server restart. Floors need a cache repack.' });
+    }
+    if (req.method === 'PUT' && path === '/v1/hub/layout') {
+      const problems = [];
+      if (body.version !== 1) problems.push('version must be 1');
+      for (const [i, n] of (body.npcs || []).entries()) if (!n.npc) problems.push(`npcs[${i}]: npc is required`);
+      for (const [i, l] of (body.locs || []).entries()) if (!l.loc) problems.push(`locs[${i}]: loc is required`);
+      log(ME.name, 'hub-layout', `${raw.length} bytes${problems.length ? ' (refused)' : ''}`);
+      if (problems.length) return send(res, 422, { error: `The layout has ${problems.length} problem(s); nothing was saved.`, problems });
+      hubSaved = body;
+      return send(res, 200, { ok: true, message: 'Saved. Restart the server to apply walls, objects and NPCs.', problems: [] });
+    }
     return send(res, 404, { error: 'Not found' });
   });
 });
 
-server.listen(8099, '127.0.0.1', () => console.log('mock admin API on http://127.0.0.1:8099 (token dev-token)'));
+const PORT = Number(process.env.MOCK_PORT) || 8099;
+server.listen(PORT, '127.0.0.1', () => console.log(`mock admin API on http://127.0.0.1:${PORT} (token dev-token)`));

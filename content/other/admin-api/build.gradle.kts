@@ -18,6 +18,7 @@ dependencies {
     implementation(projects.api.type.typeReferences)
     implementation(projects.api.utils.utilsSystem)
     implementation(projects.content.other.adminPotato)
+    implementation(projects.content.other.beanlabSoulwars)
     implementation(projects.engine.game)
     implementation(projects.engine.plugin)
     testImplementation(kotlin("test"))

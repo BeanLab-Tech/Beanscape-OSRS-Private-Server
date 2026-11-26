@@ -4,6 +4,10 @@ Bug fixes for the Beanscape server, launcher, and admin plugin. Add new entries 
 
 ## 2026-11-25
 
+### Admin plugin: Hub map tab
+
+The Beanscape Admin console has a new Hub map tab for owners. It draws the Market Hub from the server's layout file (north up) and lets you move, add and remove NPCs and objects, edit room doors, and move the arrival tile and the leave portal. Save sends the layout to the server, which checks it and lists every problem; nothing is saved while any remain. Saved changes apply after a server restart. Floors are shown but not editable here, because they need a cache repack. Needs a server restart for the new `/v1/hub/layout` admin API routes, and the new plugin jar. The tab works on the live client (Microbot 2.0.20) and on the staging client (Microbot 2.6.57); staging has no hub yet, so the tab says so.
+
 ### `::hub` commands edit the Market Hub in game
 
 Admins can now place and remove hub NPCs, objects and wall runs with `::hub npc`, `::hub loc`, `::hub wall` and `::hub rm`, undo with `::hub undo`, and write the layout with `::hub save` (validated first, atomic, previous file kept as `.bak`). Changes show to everyone immediately; a restart loads the saved file. `::hub tp`, `::hub where` and `::hub help` round it out. Floors still need a repack. See `docs/HUB_LAYOUT.md`.

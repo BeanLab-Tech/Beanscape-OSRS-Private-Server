@@ -1,6 +1,7 @@
 package net.runelite.client.plugins.microbot.beanscapeadmin;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.io.IOException;
 import java.net.URI;
@@ -10,6 +11,9 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.function.Supplier;
 
 /** Thin blocking client for the server's /v1 admin API. Always call from a worker thread. */
@@ -19,11 +23,19 @@ final class ApiClient
 	static final class ApiException extends Exception
 	{
 		final int status;
+		/** Validation messages from the server (hub layout saves); empty for other errors. */
+		final List<String> problems;
 
 		ApiException(String message, int status)
 		{
+			this(message, status, Collections.emptyList());
+		}
+
+		ApiException(String message, int status, List<String> problems)
+		{
 			super(message);
 			this.status = status;
+			this.problems = problems;
 		}
 	}
 
@@ -43,20 +55,25 @@ final class ApiClient
 
 	JsonObject get(String path) throws ApiException
 	{
-		return send(path, null, false);
+		return send(path, null, "GET");
 	}
 
 	JsonObject post(String path, JsonObject body) throws ApiException
 	{
-		return send(path, body == null ? new JsonObject() : body, false);
+		return send(path, body == null ? new JsonObject() : body, "POST");
+	}
+
+	JsonObject put(String path, JsonObject body) throws ApiException
+	{
+		return send(path, body, "PUT");
 	}
 
 	JsonObject delete(String path) throws ApiException
 	{
-		return send(path, null, true);
+		return send(path, null, "DELETE");
 	}
 
-	private JsonObject send(String path, JsonObject body, boolean delete) throws ApiException
+	private JsonObject send(String path, JsonObject body, String method) throws ApiException
 	{
 		AdminSettings cfg = settings.get();
 		if (!cfg.configured())
@@ -67,13 +84,13 @@ final class ApiClient
 			.timeout(Duration.ofSeconds(8))
 			.header("Authorization", "Bearer " + cfg.token)
 			.header("Accept", "application/json");
-		if (delete)
+		if ("DELETE".equals(method))
 		{
 			request.DELETE();
 		}
 		else if (body != null)
 		{
-			request.header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(gson.toJson(body)));
+			request.header("Content-Type", "application/json").method(method, HttpRequest.BodyPublishers.ofString(gson.toJson(body)));
 		}
 		else
 		{
@@ -86,7 +103,15 @@ final class ApiClient
 			if (response.statusCode() / 100 != 2)
 			{
 				String message = json.has("error") ? json.get("error").getAsString() : "Server answered " + response.statusCode();
-				throw new ApiException(response.statusCode() == 401 ? "Token rejected. Ask an owner for a new one." : message, response.statusCode());
+				List<String> problems = new ArrayList<>();
+				if (json.has("problems") && json.get("problems").isJsonArray())
+				{
+					for (JsonElement problem : json.getAsJsonArray("problems"))
+					{
+						problems.add(problem.getAsString());
+					}
+				}
+				throw new ApiException(response.statusCode() == 401 ? "Token rejected. Ask an owner for a new one." : message, response.statusCode(), problems);
 			}
 			return json;
 		}
