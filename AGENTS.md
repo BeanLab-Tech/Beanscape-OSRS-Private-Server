@@ -110,21 +110,22 @@ Plan: `docs/OPENRUNE_PHASE1_PLAN.md`. Phase 1 status, 2026-11-25:
 | W3 accounts | `require_registration` enforced at login (fork, `// BeanLab:`). Staff accounts (`wiseoldbean`, `umpix`) copied from live with their Argon2 hashes. Discord sign-up and password reset still write only the live SQLite DB, not Central |
 | W4 admin API | Done (`content/beanlab/beanlab-admin-api` in the fork). Verified 2026-11-25: the Admin plugin on RuneLite 1.13.6 logs in with an owner token and shows staging data |
 | W5 Grand Exchange | Done (`beanlab-ge`) |
-| W6 small features (`::name`, `::teleports`, `::questsdone`, potato), W7 client pipeline, W9 data migration | Not started |
-| W8 deploy | Manual on the VM (fork `deploy/staging/README.md`); no auto-deploy yet |
+| W6 small features | `::teleports` / `::tp` done (fork `beanlab-admin-tools`, MOD and up; `TeleportCatalog` now in `beanlab-core`). Rotten potato, `::questsdone`, `::name` not started |
+| W7 client pipeline, W9 data migration | Not started |
+| W8 deploy | Done: `beanscape-staging-deploy.timer` runs the fork's `deploy/staging/deploy-staging.sh` every 5 minutes and deploys each CI-green fork `main` (Postgres dump first, `game.yml` rendered from `deploy/game.staging.yml`). Merging to the fork restarts staging, never live |
 
 Staging on VM 123, next to live:
 
 | Piece | Where |
 |---|---|
-| Game | `beanscape-staging` service, `/opt/osrs/openrune/server` (fork `main`), world 2, **port 40002** |
+| Game | `beanscape-staging` service, `/opt/osrs/openrune/server` (fork `main`, auto-deployed), world 2, **port 40002**. Deploy log: `journalctl -u beanscape-staging-deploy` |
 | Why 40002 | The client has no port setting. With jav_config `param=15` (build) non-zero it connects to `40000 + world`. Staging's jav_config sets that: `https://runescape-server.tail5475a4.ts.net/staging/jav_config.ws` (files in `/opt/osrs/config/webconfig/staging/`) |
 | Accounts | OpenRune Central (`openrune-central`, Postgres `openrune_central`, `public.accounts`). Registration required, plus `world_login_whitelist` for world 2. Owner = `ADMINISTRATOR` rights plus a row in `beanlab.owners` |
 | Admin API | `127.0.0.1:8088`, exposed as `https://runescape-server.tail5475a4.ts.net/adminapi-staging`. Tokens: `::admintoken` in game (owners), or `beanlab.admin_tokens` (SHA-256 of the raw token) |
 | Central | Runs OpenRune-Central `d694191` **plus the fork's `deploy/central/patches/`**: unpatched, every login to a whitelisted world fails with "No reply from loginserver" |
-| Client side | The launcher's staging entry uses `https://runescape-server.tail5475a4.ts.net/staging/runelite` (world list with world 2 only) and pins Microbot AutoLogin to world 2. AutoLogin works on Microbot 2.6.57: the first attempt lands on the rev 242 "The move is almost here" notice and fails, the retry ~5 s later logs in. A failed login clears the password field, so a blank password after failures is a symptom, not the cause |
+| Client side | Plugins must run on both RuneLite 1.11.19 (live) and 1.13.6 (staging): a `NoSuchMethodError` on the client thread freezes the game on login (Companion 1.0.1 fixed `getItemPrice` returning `long`). The launcher's staging entry uses `https://runescape-server.tail5475a4.ts.net/staging/runelite` (world list with world 2 only) and pins Microbot AutoLogin to world 2. AutoLogin works on Microbot 2.6.57: the first attempt lands on the rev 242 "The move is almost here" notice and fails, the retry ~5 s later logs in. A failed login clears the password field, so a blank password after failures is a symptom, not the cause |
 | Bots | OpenRune's cosmetic bots are on (`gameplay.bots-enabled`); `::bots count|on|off|here` in game |
-| Secrets | `/opt/osrs/openrune/secrets.env` and the VM copies of `central-config.yaml` and `game.yml` only |
+| Secrets | `/opt/osrs/openrune/secrets.env` and the VM copy of `central-config.yaml` only. `game.yml` is regenerated from the repo on every deploy, so edit `deploy/game.staging.yml` instead |
 
 ---
 
