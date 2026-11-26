@@ -49,6 +49,71 @@ def test_rights_mapping():
 def test_unconfigured_host_skips_without_error(tmp_path, monkeypatch):
     monkeypatch.setattr(cs, "SECRETS_FILE", tmp_path / "missing.env")
     assert cs.upsert_account("bean", "$argon2i$x").status == "skipped"
-    assert cs.set_password("bean", "$argon2i$x").status == "skipped"
+    assert cs.set_password("bean", "$argon2i$x", 1).status == "skipped"
     cs.mirror_signup("bean", "$argon2i$x", 1)  # logs, never raises
-    cs.mirror_password("bean", "$argon2i$x")
+    cs.mirror_password("bean", "$argon2i$x", 1)
+
+
+class _FakeCentral:
+    """Just enough of a psycopg connection for upsert_account / set_password."""
+
+    def __init__(self, rows):
+        self.rows = rows  # lower(name) -> [id, discord_id, hash]
+        self.result = None
+        self.rowcount = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def cursor(self):
+        return self
+
+    def close(self):
+        pass
+
+    def execute(self, sql, params):
+        if sql.startswith("SELECT id, discord_id"):
+            row = self.rows.get(params[0].lower())
+            self.result = (row[0], row[1]) if row else None
+        elif sql.startswith("SELECT account_name"):
+            self.result = None
+        elif sql.startswith("UPDATE accounts SET password_hash = %s, updated_at"):
+            for row in self.rows.values():
+                if row[0] == params[1]:
+                    row[2] = params[0]
+        elif sql.startswith("INSERT INTO accounts"):
+            self.rows[params[0].lower()] = [len(self.rows) + 1, params[3], params[1]]
+            self.result = (len(self.rows),)
+
+    def fetchone(self):
+        return self.result
+
+
+def _with_central(monkeypatch, rows):
+    fake = _FakeCentral(rows)
+    monkeypatch.setattr(cs, "connect", lambda: fake)
+    return fake
+
+
+def test_reset_only_touches_the_same_discord_users_account(monkeypatch):
+    fake = _with_central(monkeypatch, {"bean": [1, "111", "old"]})
+    assert cs.set_password("bean", "new", 222).status == "conflict"
+    assert fake.rows["bean"][2] == "old"
+    assert cs.set_password("bean", "new", 111).status == "updated"
+    assert fake.rows["bean"][2] == "new"
+
+
+def test_reset_of_unlinked_central_account_is_refused(monkeypatch):
+    fake = _with_central(monkeypatch, {"bean": [1, None, "old"]})
+    assert cs.set_password("bean", "new", 111).status == "conflict"
+    assert fake.rows["bean"][2] == "old"
+
+
+def test_signup_never_claims_someone_elses_central_name(monkeypatch):
+    _with_central(monkeypatch, {"bean": [1, "111", "old"]})
+    assert cs.upsert_account("bean", "h", 222).status == "conflict"
+    assert cs.upsert_account("bean", "h", 111).status == "exists"
+    assert cs.upsert_account("fresh", "h", 333).status == "created"

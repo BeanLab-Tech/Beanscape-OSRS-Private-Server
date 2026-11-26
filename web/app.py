@@ -128,40 +128,37 @@ def register_account(username: str, password: str, discord_id: int, discord_user
     return "ok"
 
 
+# Reserved for the boot self-test: sign-up can never create it (the underscore fails the name
+# rules), so deleting it can't remove a player's account.
+SELF_TEST_NAME = "_selftest_"
+
+
 def self_test() -> bool:
-    """Boot self-check: create, verify, and clean up a throwaway account."""
-    password = "systemtest-" + secrets.token_hex(4)
+    """Boot self-check: insert a throwaway account, verify its Argon2 hash, delete it."""
+    password = "selftest-" + secrets.token_hex(4)
     try:
         conn = db_connect()
         try:
-            conn.execute("DELETE FROM accounts WHERE login_username = 'beanselftest'")
-            conn.commit()
-        finally:
-            conn.close()
-    except sqlite3.Error:
-        pass
-    result = register_account("beanselftest", password, 0, "systemtest", mirror=False)
-    if result != "ok":
-        log.error("self-test registration failed: %s", result)
-        return False
-    try:
-        conn = db_connect()
-        try:
+            conn.execute("DELETE FROM accounts WHERE login_username = ?", (SELF_TEST_NAME,))
+            conn.execute(
+                "INSERT INTO accounts (login_username, password_hash) VALUES (?, ?)",
+                (SELF_TEST_NAME, PH.hash(password)),
+            )
             row = conn.execute(
-                "SELECT password_hash FROM accounts WHERE login_username = 'beanselftest'"
+                "SELECT password_hash FROM accounts WHERE login_username = ?", (SELF_TEST_NAME,)
             ).fetchone()
             if row is None:
                 log.error("self-test: inserted row not found")
                 return False
             PH.verify(row[0], password)  # raises on mismatch
-            conn.execute("DELETE FROM accounts WHERE login_username = 'beanselftest'")
+            conn.execute("DELETE FROM accounts WHERE login_username = ?", (SELF_TEST_NAME,))
             conn.commit()
-            log.info("self-test passed: account insert + argon2 verify + cleanup OK")
-            return True
         finally:
             conn.close()
+        log.info("self-test passed: account insert + argon2 verify + cleanup OK")
+        return True
     except Exception as e:
-        log.error("self-test verification failed: %s", e)
+        log.error("self-test failed: %s", e)
         return False
 
 

@@ -238,6 +238,10 @@ def upsert_account(
                     (password_hash, rights, did, account_id),
                 )
                 status = "updated"
+            elif did is not None and row[1] != did:
+                # Someone else's (or an unlinked) Central account already has this name: never
+                # hand it to this Discord user.
+                return SyncResult("conflict", "name belongs to another Central account")
             else:
                 return SyncResult("exists")
             if owner:
@@ -253,8 +257,9 @@ def upsert_account(
         conn.close()
 
 
-def set_password(login: str, password_hash: str) -> SyncResult:
-    """Replaces the Central password of `login`; `skipped` if Central has no such account."""
+def set_password(login: str, password_hash: str, discord_id: int) -> SyncResult:
+    """Replaces the Central password of `login`, but only on the Central account linked to the
+    same Discord user that reset it on live (`conflict` otherwise); `skipped` if none exists."""
     try:
         conn = connect()
     except Exception as e:
@@ -264,12 +269,17 @@ def set_password(login: str, password_hash: str) -> SyncResult:
         return SyncResult("skipped", "not configured")
     try:
         with conn, conn.cursor() as cur:
+            row = _find(cur, login)
+            if row is None:
+                return SyncResult("skipped", "no account")
+            if row[1] != str(discord_id):
+                return SyncResult("conflict", "Central account is linked to another Discord user")
             cur.execute(
                 "UPDATE accounts SET password_hash = %s, updated_at = CURRENT_TIMESTAMP "
-                "WHERE lower(account_name) = lower(%s)",
-                (password_hash, login),
+                "WHERE id = %s",
+                (password_hash, row[0]),
             )
-            return SyncResult("updated" if cur.rowcount else "skipped", "" if cur.rowcount else "no account")
+            return SyncResult("updated")
     except Exception as e:
         log.error("Central password update of %s failed: %s", login, e)
         return SyncResult("error", str(e))
@@ -284,12 +294,12 @@ def mirror_signup(login: str, password_hash: str, discord_id: int | None) -> Non
     log.log(level, "central sign-up %s: %s %s", login, result.status, result.detail)
 
 
-def mirror_password(login: str, password_hash: str) -> None:
-    """Called after a successful live password reset. Logs the outcome; never raises."""
-    result = set_password(login, password_hash)
+def mirror_password(login: str, password_hash: str, discord_id: int) -> None:
+    """Called after a successful live password reset by `discord_id`. Logs; never raises."""
+    result = set_password(login, password_hash, discord_id)
     if result.status == "skipped" and result.detail == "no account":
         # Account predates the sync: copy it whole, now with the new hash.
-        mirror_signup(login, password_hash, None)
+        mirror_signup(login, password_hash, discord_id)
         return
     level = logging.INFO if result.status in ("updated", "skipped") else logging.WARNING
     log.log(level, "central password %s: %s %s", login, result.status, result.detail)
