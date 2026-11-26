@@ -7,9 +7,13 @@ logged and never blocks the live sign-up; `sync` below repairs any account that 
 
 Name rules mirror Central's world-login check (OpenRune-Central `AccountNameAuthPolicy`, as of
 d694191): only letters, digits and spaces; spaces collapsed; at most 12 characters; no "mod" or
-staff-looking fragments; no blocked words (the same remote list Central loads). Names that only
-differ in spaces or case collide. Central refuses anything else at login, so sign-up refuses it
-first. Reimplemented here, not copied.
+staff-looking fragments. Names that only differ in spaces or case collide. Central refuses
+anything else at login, so sign-up refuses it first. Reimplemented here, not copied.
+
+Blocked words: Central's default remote list is turned off on VM 123 (`badWords.remoteUrl: ""`
+in central-config.yaml) because its short entries ("s&m" -> "sm", "as$" -> "as") refuse names
+like smith, thomas and jason. Sign-up does the same: no list unless OPENRUNE_BAD_WORDS_URL is set,
+and then it must be the URL Central uses.
 
 Used by web/app.py and discordbot/bot.py (deploy copies this file next to bot.py). Database
 password: OPENRUNE_DB_PASSWORD in /opt/osrs/openrune/secrets.env (root:osrs 0640) on VM 123.
@@ -43,12 +47,8 @@ DB_USER = os.environ.get("OPENRUNE_DB_USER", "openrune")
 MAX_LENGTH = 12
 # Central's account_name_deceptive_fragments list ("mod" first: it has its own message).
 DECEPTIVE_FRAGMENTS = ("mod", "jagex", "support", "system", "official", "customer", "helpdesk")
-# The list Central's BadWordIndex loads by default (BadWordsConfig.remoteUrl).
-BAD_WORDS_URL = os.environ.get(
-    "OPENRUNE_BAD_WORDS_URL",
-    "https://gist.githubusercontent.com/briankung/e085841a7a13fa4945a0cf482950436a/raw/"
-    "326b4078db98541204e3d192d7cf84f63cd4c87a/bad_words.txt",
-)
+# Must equal Central's badWords.remoteUrl; both are off ("") on VM 123, see the module docstring.
+BAD_WORDS_URL = os.environ.get("OPENRUNE_BAD_WORDS_URL", "")
 BAD_WORDS_TTL_SECONDS = 6 * 60 * 60
 
 # Live accounts.modlevel -> Central accounts.rights. Owners also get a beanlab.owners row,
@@ -89,8 +89,10 @@ def _parse_words(text: str) -> frozenset[str]:
 
 
 def bad_words() -> frozenset[str]:
-    """Central's remote blocked-word list, cached; empty if it can't be fetched (as Central)."""
+    """Central's remote blocked-word list, cached; empty when off or unreachable (as Central)."""
     global _bad_words
+    if not BAD_WORDS_URL:
+        return frozenset()
     fetched_at, words = _bad_words
     if words and time.time() - fetched_at < BAD_WORDS_TTL_SECONDS:
         return words

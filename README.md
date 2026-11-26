@@ -392,7 +392,7 @@ password. Save it before dismissing the message. No DMs or browser needed.
 - Login names follow the OpenRune staging server's rules, so the same account works there:
   letters, numbers and single spaces only (no `_` or symbols), 2-12 characters, nothing containing
   `mod` or staff-looking words (`jagex`, `support`, `system`, `official`, `customer`, `helpdesk`),
-  no blocked words, and no name that matches an existing one when spaces and case are ignored
+  and no name that matches an existing one when spaces and case are ignored
   (`bean boy` = `beanboy`). Accounts made before this rule keep their names on live.
 - Every new account and password reset is also written to OpenRune Central (staging). Staging
   still needs a whitelist entry before you can log in there (ask staff).

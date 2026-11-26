@@ -117,3 +117,10 @@ def test_signup_never_claims_someone_elses_central_name(monkeypatch):
     assert cs.upsert_account("bean", "h", 222).status == "conflict"
     assert cs.upsert_account("bean", "h", 111).status == "exists"
     assert cs.upsert_account("fresh", "h", 333).status == "created"
+
+
+def test_blocked_word_list_is_off_by_default(monkeypatch):
+    monkeypatch.setattr(cs, "BAD_WORDS_URL", "")
+    assert cs.bad_words() == frozenset()
+    for name in ("bean smith", "thomas", "jason", "sussex"):
+        assert cs.name_problem(name) is None, name
